@@ -3,158 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mapa Cultural de Lima</title>
-    
+    <title>Prueba de Mapa</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
-        /* Estilos para que el mapa ocupe toda la pantalla */
-        body { margin: 0; padding: 0; font-family: sans-serif; }
-        #map { height: 100vh; width: 100%; z-index: 1; }
-
-        /* Estilo del Menú Flotante */
-        .panel {
-            position: absolute; 
-            top: 10px; 
-            right: 10px; 
-            z-index: 1000; /* Asegura que flote sobre el mapa */
-            background: white; 
-            padding: 15px; 
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
-            width: 250px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        
-        button {
-            width: 100%; 
-            padding: 10px; 
-            margin-bottom: 5px; 
-            cursor: pointer;
-            background: #f0f0f0; 
-            border: none; 
-            border-radius: 4px; 
-            text-align: left;
-            font-size: 14px;
-        }
-        
-        button:hover { background: #e0e0e0; }
-        
-        .btn-ruta { 
-            background: #4CAF50; 
-            color: white; 
-            font-weight: bold; 
-            margin-top: 10px; 
-            text-align: center;
-        }
-        
-        .info-ruta { 
-            margin-top: 15px; 
-            font-size: 0.9em; 
-            border-top: 1px solid #ccc;
-            padding-top: 10px;
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; background-color: #e0e0e0; }
+        .aviso {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-family: sans-serif; font-size: 20px; color: #333; z-index: 0;
         }
     </style>
 </head>
 <body>
 
-    <div class="panel">
-        <h3>🎭 Filtros</h3>
-        <button onclick="filtrar('Todos')">👁️ Ver Todo</button>
-        <button onclick="filtrar('Teatro')">🎭 Teatro</button>
-        <button onclick="filtrar('Música')">🎵 Música</button>
-        <button onclick="filtrar('Arte')">🖼️ Arte / Expo</button>
-        <hr>
-        <button class="btn-ruta" onclick="crearRuta()">🚀 Crear Ruta por Hora</button>
-        <div id="lista-ruta" class="info-ruta"></div>
-    </div>
-
+    <div class="aviso">Cargando mapa...</div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
-
     <script>
-        // ==========================================
-        // --- ZONA DE PEGAR TUS CLAVES AQUI ---
-        // ==========================================
-        // Borra los textos de ejemplo y pon tus claves reales
-        // que obtuviste en la configuración de Firebase.
-        
-        const firebaseConfig = {
-  apiKey: "AIzaSyCxwRwF97SheBpkD0bfZ6Gcw8XQH2QwNbc",
-  authDomain: "mapacultural-lima.firebaseapp.com",
-  projectId: "mapacultural-lima",
-  storageBucket: "mapacultural-lima.firebasestorage.app",
-  messagingSenderId: "170254428690",
-  appId: "1:170254428690:web:0b7dbd02636b6af29446cb"
-};
-
-        // ==========================================
-        // NO TOQUES NADA DEBAJO DE ESTA LINEA
-        // ==========================================
-
-        // 1. Iniciar Firebase
+        // Si ves el mapa, significa que Leaflet funciona bien.
         try {
-            firebase.initializeApp(firebaseConfig);
-            console.log("Firebase conectado correctamente");
+            var map = L.map('map').setView([-12.046, -77.042], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+            
+            // Un marcador de prueba
+            L.marker([-12.046, -77.042]).addTo(map)
+                .bindPopup('¡El mapa funciona! <br> El problema era la llave de Firebase.')
+                .openPopup();
+                
         } catch (error) {
-            console.error("Error conectando Firebase:", error);
-            alert("Error en la configuración de Firebase. Revisa la consola.");
+            alert("Error al cargar el mapa: " + error.message);
         }
-        
-        const db = firebase.firestore();
-
-        // 2. Iniciar Mapa (Centrado en Lima)
-        const map = L.map('map').setView([-12.046, -77.042], 12); 
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
-
-        // Variables globales
-        let eventos = [];
-        let marcadores = [];
-        let lineaRuta = null;
-
-        // 3. Función para descargar datos de Firebase
-        console.log("Intentando descargar eventos...");
-        db.collection("eventos").get().then((snapshot) => {
-            if (snapshot.empty) {
-                console.log("No se encontraron eventos en la base de datos.");
-            }
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                console.log("Evento encontrado:", data.nombre);
-                eventos.push(data);
-            });
-            // Una vez descargados, los mostramos
-            mostrarMapa(eventos);
-        }).catch((error) => {
-            console.error("Error leyendo documentos: ", error);
-        });
-
-        // 4. Función para pintar los puntos
-        function mostrarMapa(lista) {
-            // Limpiar marcadores viejos
-            marcadores.forEach(m => map.removeLayer(m));
-            if(lineaRuta) map.removeLayer(lineaRuta);
-            marcadores = [];
-            document.getElementById('lista-ruta').innerHTML = "";
-
-            lista.forEach(ev => {
-                // Asegurarse de que lat/lon sean números
-                const lat = parseFloat(ev.lat);
-                const lon = parseFloat(ev.lon);
-
-                if (!isNaN(lat) && !isNaN(lon)) {
-                    let marker = L.marker([lat, lon])
-                        .bindPopup(`
-                            <div style="text-align:center">
-                                <b>${ev.nombre}</b><br>
-                                <span style="background:#eee; padding:2px 5px; border-radius:3px">${ev.tipo}</span><br>
-                                🕒 ${ev.hora}<br>
-                                📍
+    </script>
+</body>
+</html>
