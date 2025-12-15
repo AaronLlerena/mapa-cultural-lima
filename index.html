@@ -8,55 +8,54 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        /* --- ESTRUCTURA PRINCIPAL --- */
-        body, html { margin: 0; padding: 0; font-family: sans-serif; height: 100%; }
+        /* ESTILOS: Aseguran que la página ocupe el 100% de la pantalla */
+        body, html { margin: 0; padding: 0; font-family: sans-serif; height: 100%; overflow: hidden; }
         
         .main-container {
             display: flex;
-            height: 100vh;
+            height: 100vh; /* Altura completa */
             width: 100%;
         }
 
-        /* --- BARRA LATERAL --- */
+        /* BARRA LATERAL */
         .sidebar {
             width: 350px;
             min-width: 300px;
             background: #f8f9fa;
             padding: 15px;
-            overflow-y: auto;
+            overflow-y: auto; /* Scroll si la lista es larga */
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
             gap: 10px;
+            z-index: 1001; /* Asegura que esté sobre el mapa */
         }
 
-        #map { flex-grow: 1; height: 100%; }
+        /* EL MAPA */
+        #map { 
+            flex-grow: 1; 
+            height: 100%; 
+            background: #e0e0e0; /* Fondo gris mientras carga */
+        }
 
-        /* Estilos de Botones y Selects */
+        /* Títulos y Botones */
         .titulo-seccion { font-size: 1.1em; margin-bottom: 5px; color: #333; font-weight: bold; }
 
         .btn-filtro {
             width: 100%; padding: 10px; cursor: pointer;
             background: #e9ecef; border: 1px solid #ced4da; border-radius: 4px; text-align: left; font-size: 14px;
-            transition: background 0.2s;
-            margin-bottom: 5px;
+            transition: background 0.2s; margin-bottom: 5px;
         }
         .btn-filtro:hover { background: #dee2e6; }
-        
-        /* Estilo para el botón activo */
-        .btn-filtro.activo {
-            background: #007bff; color: white; border-color: #0056b3;
-        }
+        .btn-filtro.activo { background: #007bff; color: white; border-color: #0056b3; }
 
-        /* NUEVO: Estilo del Menú Desplegable de Días */
+        /* Menú desplegable de Días */
         select.filtro-dia {
-            width: 100%; padding: 10px;
-            background: #fff; border: 2px solid #007bff; border-radius: 4px;
-            font-size: 15px; color: #333; cursor: pointer;
-            margin-bottom: 15px;
-            font-weight: bold;
+            width: 100%; padding: 10px; background: #fff; border: 2px solid #007bff;
+            border-radius: 4px; font-size: 15px; color: #333; cursor: pointer; margin-bottom: 15px; font-weight: bold;
         }
 
+        /* Botón Ruta */
         .btn-ruta-final { 
             background: #28a745; color: white; font-weight: bold; 
             text-align: center; border: none; padding: 12px;
@@ -64,9 +63,8 @@
         }
         .btn-ruta-final:hover { background: #218838; }
 
-        /* --- TARJETAS DE EVENTOS --- */
+        /* Tarjetas de Eventos */
         .lista-container { margin-top: 10px; }
-        
         .evento-card {
             background: white; border: 1px solid #ddd; border-radius: 6px;
             padding: 12px; margin-bottom: 10px; cursor: pointer;
@@ -75,7 +73,6 @@
         .evento-card:hover { border-color: #007bff; box-shadow: 0 2px 8px rgba(0,123,255,0.2); }
         .evento-card h4 { margin: 0 0 5px 0; font-size: 16px; color: #333; }
         .evento-card .meta { font-size: 0.85em; color: #666; margin-bottom: 8px; }
-        .evento-card .descripcion-completa { font-size: 0.9em; color: #444; margin-bottom: 10px; line-height: 1.4; }
         
         .btn-agendar {
             padding: 6px 12px; font-size: 0.85em; border: 1px solid #007bff;
@@ -85,9 +82,8 @@
         .btn-agendar.agendado { background: #007bff; color: white; }
 
         .info-ruta { 
-            margin-top: 15px; font-size: 0.9em; 
-            background: #e8f4ff; padding: 10px; border-radius: 5px;
-            border-left: 4px solid #007bff;
+            margin-top: 15px; font-size: 0.9em; background: #e8f4ff; 
+            padding: 10px; border-radius: 5px; border-left: 4px solid #007bff;
         }
     </style>
 </head>
@@ -95,11 +91,10 @@
 
     <div class="main-container">
         <div class="sidebar">
-            
             <div class="titulo-seccion">📅 ¿Cuándo quieres salir?</div>
             <select id="select-dias" class="filtro-dia" onchange="cambiarFiltroDia()">
                 <option value="Todos">Ver Todos los Días</option>
-                </select>
+            </select>
 
             <hr style="width: 100%; border-color: #ddd;">
 
@@ -116,11 +111,10 @@
 
             <div class="titulo-seccion">Resultados: <span id="contador-eventos">0</span></div>
             <div id="lista-lateral" class="lista-container">
-                <p style="color:#666">Cargando...</p>
+                <p style="color:#666">Cargando eventos...</p>
             </div>
 
             <hr style="width: 100%; border-color: #ddd;">
-            
             <button class="btn-ruta-final" onclick="crearRutaConSeleccionados()">🚀 Crear Ruta con Mis Eventos</button>
             <div id="lista-ruta-resultado" class="info-ruta" style="display: none;"></div>
         </div>
@@ -128,193 +122,203 @@
         <div id="map"></div>
     </div>
 
-
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
     <script>
-        // CONFIGURACIÓN FIREBASE
-        const firebaseConfig = {
-            apiKey: "AIzaSyCxwRwF97SheBpKd0bfZ6Gcw8XQH2QwNbc",
-            authDomain: "mapacultural-lima.firebaseapp.com",
-            projectId: "mapacultural-lima",
-            storageBucket: "mapacultural-lima.firebasestorage.app",
-            messagingSenderId: "170254428690",
-            appId: "1:170254428690:web:0b7dbd02636b6af29446cb"
-        };
+        // --- BLOQUE DE SEGURIDAD PARA DETECTAR ERRORES ---
+        try {
+            // 1. CONFIGURACIÓN FIREBASE
+            const firebaseConfig = {
+                apiKey: "AIzaSyCxwRwF97SheBpKd0bfZ6Gcw8XQH2QwNbc",
+                authDomain: "mapacultural-lima.firebaseapp.com",
+                projectId: "mapacultural-lima",
+                storageBucket: "mapacultural-lima.firebasestorage.app",
+                messagingSenderId: "170254428690",
+                appId: "1:170254428690:web:0b7dbd02636b6af29446cb"
+            };
 
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
+            firebase.initializeApp(firebaseConfig);
+            const db = firebase.firestore();
 
-        // INICIAR MAPA
-        const map = L.map('map').setView([-12.046, -77.042], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
+            // 2. INICIAR MAPA
+            const map = L.map('map').setView([-12.046, -77.042], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
 
-        // VARIABLES GLOBALES
-        let todosLosEventos = [];
-        let seleccionadosIDs = new Set();
-        let marcadores = {}; 
-        let lineaRuta = null;
+            // VARIABLES GLOBALES
+            let todosLosEventos = [];
+            let seleccionadosIDs = new Set();
+            let marcadores = {}; 
+            let lineaRuta = null;
+            let filtroDiaActual = 'Todos';
+            let filtroCategoriaActual = 'Todos';
 
-        // ESTADO DE LOS FILTROS
-        let filtroDiaActual = 'Todos';
-        let filtroCategoriaActual = 'Todos';
+            // 3. DESCARGAR DATOS DE LA NUBE
+            console.log("Iniciando descarga de Firebase...");
+            db.collection("eventos").get().then((snapshot) => {
+                if (snapshot.empty) {
+                    document.getElementById('lista-lateral').innerHTML = "<p>La base de datos está vacía. Ejecuta el scraper en Python.</p>";
+                    return;
+                }
 
-        // 1. DESCARGAR EVENTOS
-        db.collection("eventos").get().then((snapshot) => {
-            snapshot.forEach((doc) => {
-                let data = doc.data();
-                data.id = doc.id;
-                todosLosEventos.push(data);
-            });
-            
-            // Una vez descargados, configuramos la vista inicial
-            llenarDropdownDias(); // <--- NUEVO: Detecta los días automáticamente
-            aplicarFiltrosCombinados();
-        });
-
-        // --- NUEVA FUNCIÓN: Llenar el menú de días automáticamente ---
-        function llenarDropdownDias() {
-            const select = document.getElementById('select-dias');
-            // Usamos un Set para obtener días únicos (evitar repetidos)
-            const diasUnicos = new Set();
-            
-            todosLosEventos.forEach(ev => {
-                if(ev.dia) diasUnicos.add(ev.dia);
-            });
-
-            // Ordenamos los días (alfabéticamente sirve para Lunes, Martes...)
-            const listaDias = Array.from(diasUnicos).sort();
-
-            // Creamos las opciones en el HTML
-            listaDias.forEach(dia => {
-                let option = document.createElement("option");
-                option.value = dia;
-                option.text = "📅 " + dia;
-                select.appendChild(option);
-            });
-        }
-
-        // --- GESTIÓN DE FILTROS ---
-        
-        // Cuando cambias el Select de Día
-        function cambiarFiltroDia() {
-            filtroDiaActual = document.getElementById('select-dias').value;
-            aplicarFiltrosCombinados();
-        }
-
-        // Cuando haces click en un botón de Categoría
-        function cambiarFiltroCategoria(categoria, botonPresionado) {
-            filtroCategoriaActual = categoria;
-            
-            // Actualizar estilo visual de los botones (quitar activo a todos, poner al presionado)
-            const botones = document.querySelectorAll('#botones-categorias .btn-filtro');
-            botones.forEach(btn => btn.classList.remove('activo'));
-            botonPresionado.classList.add('activo');
-
-            aplicarFiltrosCombinados();
-        }
-
-        // EL CEREBRO DE LOS FILTROS: Combina Día + Categoría
-        function aplicarFiltrosCombinados() {
-            const eventosFiltrados = todosLosEventos.filter(ev => {
-                // Condición 1: Coincide el día? (o está en 'Todos')
-                const coincideDia = (filtroDiaActual === 'Todos') || (ev.dia === filtroDiaActual);
+                snapshot.forEach((doc) => {
+                    let data = doc.data();
+                    data.id = doc.id;
+                    todosLosEventos.push(data);
+                });
                 
-                // Condición 2: Coincide la categoría? (o está en 'Todos')
-                const coincideCat = (filtroCategoriaActual === 'Todos') || (ev.tipo === filtroCategoriaActual);
+                console.log(`Se descargaron ${todosLosEventos.length} eventos.`);
+                
+                // Configurar filtros
+                llenarDropdownDias();
+                aplicarFiltrosCombinados();
 
-                // Deben cumplirse AMBAS
-                return coincideDia && coincideCat;
+            }).catch((error) => {
+                console.error("Error Firebase:", error);
+                alert("Error conectando a la base de datos: " + error.message);
+                document.getElementById('lista-lateral').innerHTML = "<p style='color:red'>Error de conexión.</p>";
             });
 
-            actualizarVista(eventosFiltrados);
-        }
+            // --- FUNCIONES ---
 
-        // --- ACTUALIZAR MAPA Y LISTA ---
-        function actualizarVista(listaDeEventos) {
-            // Limpiar todo
-            for (let id in marcadores) map.removeLayer(marcadores[id]);
-            marcadores = {};
-            if(lineaRuta) map.removeLayer(lineaRuta);
-            document.getElementById('lista-ruta-resultado').style.display = 'none';
+            function llenarDropdownDias() {
+                const select = document.getElementById('select-dias');
+                const diasUnicos = new Set();
+                todosLosEventos.forEach(ev => { if(ev.dia) diasUnicos.add(ev.dia); });
+                const listaDias = Array.from(diasUnicos).sort();
+                
+                // Limpiar opciones previas (excepto la primera)
+                select.innerHTML = '<option value="Todos">Ver Todos los Días</option>';
 
-            let htmlLista = "";
-            document.getElementById('contador-eventos').innerText = listaDeEventos.length;
-
-            if (listaDeEventos.length === 0) {
-                htmlLista = "<p style='text-align:center; padding:20px;'>No hay eventos con estos filtros 😢</p>";
+                listaDias.forEach(dia => {
+                    let option = document.createElement("option");
+                    option.value = dia;
+                    option.text = "📅 " + dia;
+                    select.appendChild(option);
+                });
             }
 
-            listaDeEventos.forEach(ev => {
-                let lat = parseFloat(ev.lat);
-                let lon = parseFloat(ev.lon);
-                if(isNaN(lat) || isNaN(lon)) return;
-
-                // Marcador
-                let marker = L.marker([lat, lon])
-                    .bindPopup(`<b>${ev.hora}</b><br>${ev.nombre}<br><i>${ev.lugar}</i>`);
-                marker.addTo(map);
-                marcadores[ev.id] = marker;
-
-                // Tarjeta HTML
-                const estaAgendado = seleccionadosIDs.has(ev.id);
-                const claseBoton = estaAgendado ? 'btn-agendar agendado' : 'btn-agendar';
-                const textoBoton = estaAgendado ? '✅ Agendado' : 'Agendar';
-
-                htmlLista += `
-                    <div class="evento-card" onclick="resaltarEnMapa('${ev.id}')">
-                        <h4>${ev.nombre}</h4>
-                        <div class="meta">🕒 ${ev.hora} | ${ev.dia || ''} <br> 📍 ${ev.lugar}</div>
-                        <div class="descripcion-completa">${ev.nombre_completo}</div>
-                        <button id="btn-${ev.id}" class="${claseBoton}" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">
-                            ${textoBoton}
-                        </button>
-                    </div>
-                `;
-            });
-
-            document.getElementById('lista-lateral').innerHTML = htmlLista;
-        }
-
-        // --- INTERACCIONES Y RUTA (Igual que antes) ---
-
-        function resaltarEnMapa(id) {
-            const marker = marcadores[id];
-            if (marker) {
-                map.flyTo(marker.getLatLng(), 16, { duration: 1.5 });
-                marker.openPopup();
-            }
-        }
-
-        function toggleAgendar(id) {
-            const btn = document.getElementById(`btn-${id}`);
-            if (seleccionadosIDs.has(id)) {
-                seleccionadosIDs.delete(id);
-                btn.classList.remove('agendado');
-                btn.innerHTML = 'Agendar';
-            } else {
-                seleccionadosIDs.add(id);
-                btn.classList.add('agendado');
-                btn.innerHTML = '✅ Agendado';
-            }
-            document.getElementById('lista-ruta-resultado').style.display = 'none';
-            if(lineaRuta) map.removeLayer(lineaRuta);
-        }
-
-        function crearRutaConSeleccionados() {
-            let rutaEventos = todosLosEventos.filter(ev => seleccionadosIDs.has(ev.id));
-
-            if (rutaEventos.length < 2) {
-                alert("Agenda al menos 2 eventos para crear una ruta.");
-                return;
+            function cambiarFiltroDia() {
+                filtroDiaActual = document.getElementById('select-dias').value;
+                aplicarFiltrosCombinados();
             }
 
-            // Ordenar por hora
-            rutaEventos.sort((a, b) => a.hora.localeCompare(b.hora));
-            
-            // Dibujar línea
-            let latlngs = rutaEventos.map(e =>
+            function cambiarFiltroCategoria(categoria, botonPresionado) {
+                filtroCategoriaActual = categoria;
+                const botones = document.querySelectorAll('#botones-categorias .btn-filtro');
+                botones.forEach(btn => btn.classList.remove('activo'));
+                botonPresionado.classList.add('activo');
+                aplicarFiltrosCombinados();
+            }
+
+            function aplicarFiltrosCombinados() {
+                const eventosFiltrados = todosLosEventos.filter(ev => {
+                    const coincideDia = (filtroDiaActual === 'Todos') || (ev.dia === filtroDiaActual);
+                    const coincideCat = (filtroCategoriaActual === 'Todos') || (ev.tipo === filtroCategoriaActual);
+                    return coincideDia && coincideCat;
+                });
+                actualizarVista(eventosFiltrados);
+            }
+
+            function actualizarVista(listaDeEventos) {
+                // Limpiar mapa
+                for (let id in marcadores) map.removeLayer(marcadores[id]);
+                marcadores = {};
+                if(lineaRuta) map.removeLayer(lineaRuta);
+                document.getElementById('lista-ruta-resultado').style.display = 'none';
+
+                let htmlLista = "";
+                document.getElementById('contador-eventos').innerText = listaDeEventos.length;
+
+                if (listaDeEventos.length === 0) {
+                    htmlLista = "<p style='text-align:center; padding:20px; color:#777;'>No se encontraron eventos con estos filtros.</p>";
+                }
+
+                listaDeEventos.forEach(ev => {
+                    let lat = parseFloat(ev.lat);
+                    let lon = parseFloat(ev.lon);
+                    if(isNaN(lat) || isNaN(lon)) return;
+
+                    // Marcador
+                    let marker = L.marker([lat, lon])
+                        .bindPopup(`<b>${ev.hora}</b><br>${ev.nombre}<br><i>${ev.lugar}</i>`);
+                    marker.addTo(map);
+                    marcadores[ev.id] = marker;
+
+                    // Tarjeta
+                    const estaAgendado = seleccionadosIDs.has(ev.id);
+                    const claseBoton = estaAgendado ? 'btn-agendar agendado' : 'btn-agendar';
+                    const textoBoton = estaAgendado ? '✅ Agendado' : 'Agendar';
+
+                    htmlLista += `
+                        <div class="evento-card" onclick="resaltarEnMapa('${ev.id}')">
+                            <h4>${ev.nombre}</h4>
+                            <div class="meta">🕒 ${ev.hora} | ${ev.dia || ''} <br> 📍 ${ev.lugar}</div>
+                            <button id="btn-${ev.id}" class="${claseBoton}" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">
+                                ${textoBoton}
+                            </button>
+                        </div>
+                    `;
+                });
+
+                document.getElementById('lista-lateral').innerHTML = htmlLista;
+            }
+
+            function resaltarEnMapa(id) {
+                const marker = marcadores[id];
+                if (marker) {
+                    map.flyTo(marker.getLatLng(), 16, { duration: 1.5 });
+                    marker.openPopup();
+                }
+            }
+
+            window.toggleAgendar = function(id) {
+                const btn = document.getElementById(`btn-${id}`);
+                if (seleccionadosIDs.has(id)) {
+                    seleccionadosIDs.delete(id);
+                    btn.classList.remove('agendado');
+                    btn.innerHTML = 'Agendar';
+                } else {
+                    seleccionadosIDs.add(id);
+                    btn.classList.add('agendado');
+                    btn.innerHTML = '✅ Agendado';
+                }
+                document.getElementById('lista-ruta-resultado').style.display = 'none';
+                if(lineaRuta) map.removeLayer(lineaRuta);
+            }
+
+            window.crearRutaConSeleccionados = function() {
+                let rutaEventos = todosLosEventos.filter(ev => seleccionadosIDs.has(ev.id));
+                if (rutaEventos.length < 2) {
+                    alert("Selecciona al menos 2 eventos para crear una ruta.");
+                    return;
+                }
+                rutaEventos.sort((a, b) => a.hora.localeCompare(b.hora));
+                
+                let latlngs = rutaEventos.map(e => [parseFloat(e.lat), parseFloat(e.lon)]);
+                if(lineaRuta) map.removeLayer(lineaRuta);
+                lineaRuta = L.polyline(latlngs, {color: '#007bff', weight: 5, opacity: 0.8}).addTo(map);
+                map.fitBounds(lineaRuta.getBounds(), {padding: [50, 50]});
+
+                let html = "<b>🗓️ Tu Itinerario:</b><br><br>";
+                rutaEventos.forEach((e, i) => {
+                    html += `<div style="margin-bottom:10px; border-bottom:1px dotted #ccc;">
+                                <b>${i+1}. [${e.hora}]</b> ${e.nombre}<br><small>📍 ${e.lugar}</small>
+                             </div>`;
+                });
+                const resDiv = document.getElementById('lista-ruta-resultado');
+                resDiv.innerHTML = html;
+                resDiv.style.display = 'block';
+                resDiv.scrollIntoView({ behavior: 'smooth' });
+            }
+
+        } catch (errorCrítico) {
+            alert("⚠️ Error Crítico en el código: " + errorCrítico.message);
+            console.error(errorCrítico);
+        }
+    </script>
+</body>
+</html>
