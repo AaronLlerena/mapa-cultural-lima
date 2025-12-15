@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Cultural de Lima</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        .controls {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            background: white; padding: 15px; border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            max-width: 250px;
+        }
+        .btn {
+            display: block; width: 100%; margin-bottom: 5px; padding: 10px;
+            cursor: pointer; background: #eee; border: none; border-radius: 4px;
+            text-align: left;
+        }
+        .btn:hover { background: #ddd; }
+        .btn-route { background: #4CAF50; color: white; font-weight: bold; margin-top: 10px; }
+        .ruta-info { margin-top: 10px; font-size: 0.9em; max-height: 300px; overflow-y: auto;}
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h3>🎭 Filtros</h3>
+        <button class="btn" onclick="filtrar('Todos')">Ver Todo</button>
+        <button class="btn" onclick="filtrar('Teatro')">Teatro</button>
+        <button class="btn" onclick="filtrar('Arte')">Arte / Expo</button>
+        <button class="btn" onclick="filtrar('Música')">Música</button>
+        <hr>
+        <button class="btn btn-route" onclick="crearRutaInteligente()">🚀 Crear Ruta por Hora</button>
+        <div id="ruta-detalles" class="ruta-info"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // --- 3. CONFIGURACIÓN DE FIREBASE ---
+        // ¡BORRA ESTO Y PEGA TU 'firebaseConfig' AQUÍ ABAJO!
+        const firebaseConfig = 
+  apiKey: "AIzaSyCxwRwF97SheBpkD0bfZ6Gcw8XQH2QwNbc",
+  authDomain: "mapacultural-lima.firebaseapp.com",
+  projectId: "mapacultural-lima",
+  storageBucket: "mapacultural-lima.firebasestorage.app",
+  messagingSenderId: "170254428690",
+  appId: "1:170254428690:web:0b7dbd02636b6af29446cb"
+        };
+
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Inicializar Mapa (Centrado en Lima)
+        const map = L.map('map').setView([-12.0464, -77.0428], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let todosLosEventos = [];
+        let marcadores = [];
+        let lineaRuta = null; // Para dibujar la línea de la ruta
+
+        // --- 4. FUNCIÓN PARA LEER DATOS DE LA NUBE ---
+        function cargarEventos() {
+            console.log("Cargando eventos...");
+            db.collection("eventos").get().then((querySnapshot) => {
+                querySnapshot.forEach((doc) => {
+                    todosLosEventos.push(doc.data());
+                });
+                mostrarEnMapa(todosLosEventos);
+            });
+        }
+
+        // --- 5. MOSTRAR PUNTOS EN EL MAPA ---
+        function mostrarEnMapa(listaEventos) {
+            // Limpiar mapa
+            marcadores.forEach(m => map.removeLayer(m));
+            if (lineaRuta) map.removeLayer(lineaRuta);
+            marcadores = [];
+            document.getElementById('ruta-detalles').innerHTML = "";
+
+            listaEventos.forEach(evento => {
+                // Crear marcador
+                const marker = L.marker([evento.lat, evento.lon])
+                    .bindPopup(`<b>${evento.nombre}</b><br>🕒 ${evento.hora}<br>📍 ${evento.lugar}<br>🏷️ ${evento.tipo}`)
+                    .addTo(map);
+                marcadores.push(marker);
+            });
+        }
+
+        // --- 6. FILTROS ---
+        function filtrar(categoria) {
+            if (categoria === 'Todos') {
+                mostrarEnMapa(todosLosEventos);
+            } else {
+                const filtrados = todosLosEventos.filter(e => e.tipo === categoria);
+                mostrarEnMapa(filtrados);
+            }
+        }
+
+        // --- 7. LÓGICA DE LA RUTA INTELIGENTE (TU VISIÓN) ---
+        function crearRutaInteligente() {
+            // Tomamos los eventos visibles actualmente (filtrados o todos)
+            // Si quieres que la ruta sea SIEMPRE de todos, usa 'todosLosEventos'
+            // Aquí usaremos los eventos que están en la variable global, asumimos que filtramos primero visualmente.
+            // Para este ejemplo simple, usaremos todos los cargados.
+            
+            // 1. Ordenar por Hora (Lógica clave)
+            const rutaOrdenada = [...todosLosEventos].sort((a, b) => {
+                return a.hora.localeCompare(b.hora);
+            });
+
+            // 2. Dibujar la línea en el mapa
+            const coordenadasRuta = rutaOrdenada.map(e => [e.lat, e.lon]);
+            if (lineaRuta) map.removeLayer(lineaRuta);
+            
+            lineaRuta = L.polyline(coordenadasRuta, {color: 'blue', weight: 4, opacity: 0.7, dashArray: '10, 10'}).addTo(map);
+            map.fitBounds(lineaRuta.getBounds()); // Enfocar el mapa en la ruta
+
+            // 3. Mostrar la lista paso a paso en el panel
+            const panel = document.getElementById('ruta-detalles');
+            let html = "<h4>🗓️ Tu Itinerario:</h4>";
+            rutaOrdenada.forEach((e, index) => {
+                html += `<p><b>${index + 1}. [${e.hora}]</b> ${e.nombre}<br><small>${e.lugar}</small></p>`;
+            });
+            panel.innerHTML = html;
+        }
+
+        // Arrancar
+        cargarEventos();
+
+    </script>
+</body>
+</html>
