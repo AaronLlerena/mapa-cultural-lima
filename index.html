@@ -8,105 +8,98 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        /* --- ESTRUCTURA GENERAL --- */
-        body, html { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; height: 100%; overflow: hidden; }
-        
-        .main-container {
-            display: flex;
-            height: 100vh;
-            width: 100%;
-        }
+        body, html { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; height: 100%; overflow: hidden; }
+        .main-container { display: flex; height: 100vh; width: 100%; }
 
-        /* --- BARRA LATERAL (AJUSTABLE) --- */
+        /* BARRA LATERAL */
         .sidebar {
-            width: 320px; min-width: 250px; max-width: 50vw;
+            width: 340px; min-width: 280px; max-width: 50vw;
             background: #f8f9fa; padding: 10px; overflow-y: auto;
             box-shadow: 2px 0 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 8px; z-index: 1001;
             resize: horizontal; overflow-x: hidden;
         }
 
-        /* MAPA */
         #map { flex-grow: 1; height: 100%; background: #e0e0e0; }
 
-        /* --- ESTILOS COMPACTOS --- */
-        .titulo-seccion { font-size: 0.95em; margin-bottom: 3px; color: #444; font-weight: bold; margin-top: 5px;}
+        .titulo-seccion { font-size: 0.9em; margin-bottom: 3px; color: #555; font-weight: bold; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px;}
         
         select.filtro-dia {
-            width: 100%; padding: 6px; background: #fff; border: 1px solid #007bff;
-            border-radius: 4px; font-size: 13px; color: #333; cursor: pointer; font-weight: bold;
+            width: 100%; padding: 8px; background: #fff; border: 1px solid #007bff;
+            border-radius: 6px; font-size: 14px; color: #333; cursor: pointer; font-weight: bold;
         }
 
         .btn-filtro {
-            width: 100%; padding: 6px 10px; cursor: pointer;
-            background: #fff; border: 1px solid #ccc; border-radius: 4px; text-align: left; font-size: 13px;
-            transition: all 0.2s; margin-bottom: 3px;
+            width: 100%; padding: 8px 10px; cursor: pointer;
+            background: #fff; border: 1px solid #ddd; border-radius: 6px; text-align: left; font-size: 13px;
+            transition: all 0.2s; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;
         }
-        .btn-filtro:hover { background: #f0f0f0; }
-        .btn-filtro.activo { background: #007bff; color: white; border-color: #0056b3; }
+        .btn-filtro:hover { background: #f1f3f5; transform: translateX(2px); }
+        .btn-filtro.activo { background: #007bff; color: white; border-color: #0056b3; box-shadow: 0 2px 4px rgba(0,123,255,0.3); }
 
-        .controles-resultados {
-            display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;
-        }
-        .btn-ordenar {
-            background: #6c757d; color: white; border: none; padding: 4px 8px;
-            border-radius: 4px; font-size: 11px; cursor: pointer;
-        }
+        .controles-resultados { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .btn-ordenar { background: #6c757d; color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; }
 
-        /* --- TARJETAS --- */
+        /* TARJETAS MEJORADAS */
         .lista-container { margin-top: 5px; }
         .evento-card {
-            background: white; border: 1px solid #ddd; border-radius: 5px; padding: 8px; 
-            margin-bottom: 8px; cursor: pointer; transition: border-color 0.2s; position: relative;
+            background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 12px; 
+            margin-bottom: 10px; cursor: pointer; transition: all 0.2s; position: relative;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
-        .evento-card:hover { border-color: #007bff; border-left: 3px solid #007bff; }
-        .evento-card h4 { margin: 0 0 3px 0; font-size: 13px; color: #222; line-height: 1.2; }
-        .evento-card .meta { font-size: 11px; color: #007bff; font-weight: 600; margin-bottom: 4px; }
-        .evento-card .descripcion-completa { font-size: 12px; color: #555; margin-bottom: 6px; line-height: 1.3; text-align: justify; }
+        .evento-card:hover { border-color: #007bff; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        
+        .evento-card h4 { margin: 0 0 5px 0; font-size: 14px; color: #222; line-height: 1.3; }
+        
+        /* Nueva sección de META DATOS (Lugar y Dirección) */
+        .evento-card .meta-lugar { 
+            font-size: 12px; color: #007bff; font-weight: 700; margin-bottom: 2px; 
+        }
+        .evento-card .meta-direccion { 
+            font-size: 11px; color: #666; font-style: italic; margin-bottom: 8px; display: block;
+        }
+        .evento-card .meta-hora {
+            display: inline-block; background: #e9ecef; padding: 2px 6px; border-radius: 4px; 
+            font-size: 11px; color: #333; font-weight: bold; margin-bottom: 6px;
+        }
+
+        .evento-card .descripcion-completa { font-size: 12px; color: #444; margin-bottom: 5px; line-height: 1.4; text-align: left; }
         
         .btn-agendar {
-            padding: 3px 8px; font-size: 11px; border: 1px solid #007bff;
-            background: white; color: #007bff; border-radius: 12px;
-            cursor: pointer; transition: all 0.2s; float: right;
+            position: absolute; top: 10px; right: 10px;
+            padding: 4px 10px; font-size: 11px; border: 1px solid #007bff;
+            background: white; color: #007bff; border-radius: 20px;
+            cursor: pointer; transition: all 0.2s; font-weight: 600;
         }
-        .btn-agendar.agendado { background: #007bff; color: white; }
+        .btn-agendar:hover { background: #f0f8ff; }
+        .btn-agendar.agendado { background: #007bff; color: white; border-color: #0056b3; }
 
         .btn-ruta-final { 
-            background: #28a745; color: white; font-weight: bold; font-size: 13px;
-            text-align: center; border: none; padding: 10px; margin-top: 5px; cursor: pointer; width: 100%; border-radius: 4px;
+            background: #28a745; color: white; font-weight: bold; font-size: 14px;
+            text-align: center; border: none; padding: 12px; margin-top: 5px; cursor: pointer; width: 100%; border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3); transition: background 0.2s;
         }
         .btn-ruta-final:hover { background: #218838; }
 
-        .info-ruta { 
-            margin-top: 10px; font-size: 12px; background: #e8f4ff; 
-            padding: 8px; border-radius: 4px; border-left: 3px solid #007bff;
-        }
+        .info-ruta { margin-top: 15px; font-size: 12px; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6; }
 
-        /* --- NUEVO ESTILO: MARCADOR NUMERADO --- */
+        /* ICONOS MAPA */
         .icono-numero {
-            background-color: #007bff;
-            color: white;
-            border-radius: 50%;
-            text-align: center;
-            line-height: 24px; /* Centrado vertical */
-            font-weight: bold;
-            font-size: 12px;
-            border: 2px solid white;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            background-color: #007bff; color: white; border-radius: 50%; text-align: center;
+            line-height: 24px; font-weight: bold; font-size: 12px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
-        /* Color diferente para el primer evento */
-        .icono-numero.inicio { background-color: #28a745; width: 30px !important; height: 30px !important; line-height: 26px; font-size: 14px; }
+        .icono-numero.inicio { background-color: #28a745; width: 30px !important; height: 30px !important; line-height: 26px; font-size: 14px; z-index: 1000 !important; }
     </style>
 </head>
 <body>
 
     <div class="main-container">
         <div class="sidebar">
-            <div class="titulo-seccion">📅 Día</div>
+            <div class="titulo-seccion">📅 ¿Cuándo quieres salir?</div>
             <select id="select-dias" class="filtro-dia" onchange="cambiarFiltroDia()">
                 <option value="Todos">Cargando días...</option>
             </select>
 
-            <div class="titulo-seccion">🎭 Categoría</div>
+            <div class="titulo-seccion">🎭 ¿Qué te provoca?</div>
             <div id="botones-categorias">
                 <button class="btn-filtro activo" onclick="cambiarFiltroCategoria('Todos', this)">👁️ Ver Todo</button>
                 <button class="btn-filtro" onclick="cambiarFiltroCategoria('Teatro', this)">🎭 Teatro</button>
@@ -115,7 +108,7 @@
                 <button class="btn-filtro" onclick="cambiarFiltroCategoria('Arte/Expo', this)">🖼️ Arte / Expo</button>
             </div>
             
-            <hr style="width: 100%; border-color: #eee; margin: 8px 0;">
+            <hr style="width: 100%; border-color: #eee; margin: 10px 0;">
 
             <div class="controles-resultados">
                 <div class="titulo-seccion" style="margin:0">Eventos (<span id="contador-eventos">0</span>)</div>
@@ -123,10 +116,10 @@
             </div>
 
             <div id="lista-lateral" class="lista-container">
-                <p style="font-size:12px; color:#666">Cargando datos...</p>
+                <p style="font-size:12px; color:#666; text-align:center;">Cargando datos culturales...</p>
             </div>
 
-            <hr style="width: 100%; border-color: #eee; margin: 8px 0;">
+            <hr style="width: 100%; border-color: #eee; margin: 10px 0;">
             <button class="btn-ruta-final" onclick="crearRutaConSeleccionados()">🚀 Crear Ruta</button>
             <div id="lista-ruta-resultado" class="info-ruta" style="display: none;"></div>
         </div>
@@ -136,13 +129,12 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-polyline-decorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
-    
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
     <script>
         try {
-            // 1. CONFIGURACIÓN FIREBASE
+            // CLAVES DE FIREBASE (NO CAMBIAR)
             const firebaseConfig = {
                 apiKey: "AIzaSyCxwRwF97SheBpKd0bfZ6Gcw8XQH2QwNbc",
                 authDomain: "mapacultural-lima.firebaseapp.com",
@@ -155,29 +147,25 @@
             firebase.initializeApp(firebaseConfig);
             const db = firebase.firestore();
 
-            // 2. INICIAR MAPA
+            // MAPA
             const map = L.map('map').setView([-12.046, -77.042], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap'
-            }).addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
-            // VARIABLES
+            // DATOS
             let todosLosEventos = [];
             let eventosActuales = []; 
             let seleccionadosIDs = new Set();
             let marcadores = {}; 
             let lineaRuta = null;
-            let flechasRuta = null; // Variable para las flechas
-            let marcadoresRuta = []; // Variable para los pines numerados
-
+            let flechasRuta = null;
+            let marcadoresRuta = []; 
             let filtroDiaActual = 'Todos';
             let filtroCategoriaActual = 'Todos';
 
-            // 3. DESCARGA
-            console.log("Descargando...");
+            console.log("Descargando eventos...");
             db.collection("eventos").get().then((snapshot) => {
                 if (snapshot.empty) {
-                    document.getElementById('lista-lateral').innerHTML = "<p>Base de datos vacía.</p>";
+                    document.getElementById('lista-lateral').innerHTML = "<p>Base de datos vacía. Corre el scraper de Python.</p>";
                     return;
                 }
                 snapshot.forEach((doc) => {
@@ -185,29 +173,19 @@
                     data.id = doc.id;
                     todosLosEventos.push(data);
                 });
-                
                 llenarDropdownDias();
                 aplicarFiltrosCombinados();
+            }).catch(e => alert("Error DB: " + e.message));
 
-            }).catch((error) => {
-                console.error(error);
-                alert("Error de conexión: " + error.message);
-            });
-
-            // --- FUNCIONES ---
-
+            // FUNCIONES UI
             function llenarDropdownDias() {
                 const select = document.getElementById('select-dias');
                 const diasUnicos = new Set();
                 todosLosEventos.forEach(ev => { if(ev.dia) diasUnicos.add(ev.dia); });
                 const listaDias = Array.from(diasUnicos).sort();
-                
                 select.innerHTML = '<option value="Todos">📅 Todos los Días</option>';
                 listaDias.forEach(dia => {
-                    let option = document.createElement("option");
-                    option.value = dia;
-                    option.text = dia;
-                    select.appendChild(option);
+                    let opt = document.createElement("option"); opt.value = dia; opt.text = dia; select.appendChild(opt);
                 });
             }
 
@@ -216,19 +194,18 @@
                 aplicarFiltrosCombinados();
             }
 
-            function cambiarFiltroCategoria(categoria, botonPresionado) {
+            function cambiarFiltroCategoria(categoria, boton) {
                 filtroCategoriaActual = categoria;
-                const botones = document.querySelectorAll('#botones-categorias .btn-filtro');
-                botones.forEach(btn => btn.classList.remove('activo'));
-                botonPresionado.classList.add('activo');
+                document.querySelectorAll('#botones-categorias .btn-filtro').forEach(b => b.classList.remove('activo'));
+                boton.classList.add('activo');
                 aplicarFiltrosCombinados();
             }
 
             function aplicarFiltrosCombinados() {
                 eventosActuales = todosLosEventos.filter(ev => {
-                    const coincideDia = (filtroDiaActual === 'Todos') || (ev.dia === filtroDiaActual);
-                    const coincideCat = (filtroCategoriaActual === 'Todos') || (ev.tipo === filtroCategoriaActual);
-                    return coincideDia && coincideCat;
+                    const diaOk = (filtroDiaActual === 'Todos') || (ev.dia === filtroDiaActual);
+                    const catOk = (filtroCategoriaActual === 'Todos') || (ev.tipo === filtroCategoriaActual);
+                    return diaOk && catOk;
                 });
                 actualizarVista(eventosActuales);
             }
@@ -238,62 +215,55 @@
                 actualizarVista(eventosActuales);
             }
 
-            // LIMPIAR RUTA ANTERIOR (Líneas, flechas y números)
             function limpiarRutaEnMapa() {
                 if(lineaRuta) map.removeLayer(lineaRuta);
                 if(flechasRuta) map.removeLayer(flechasRuta);
                 marcadoresRuta.forEach(m => map.removeLayer(m));
                 marcadoresRuta = [];
-                
-                // Restaurar marcadores azules originales si es necesario
-                for (let id in marcadores) {
-                    if (!map.hasLayer(marcadores[id])) marcadores[id].addTo(map);
+                // Restaurar pines azules si no hay ruta activa
+                if(seleccionadosIDs.size < 2) {
+                     for (let id in marcadores) { if(!map.hasLayer(marcadores[id])) marcadores[id].addTo(map); }
                 }
             }
 
             function actualizarVista(lista) {
-                limpiarRutaEnMapa(); // Limpiar ruta si cambiamos vista
-                
-                // Limpiar marcadores normales
+                limpiarRutaEnMapa();
                 for (let id in marcadores) map.removeLayer(marcadores[id]);
                 marcadores = {};
 
-                let htmlLista = "";
+                let html = "";
                 document.getElementById('contador-eventos').innerText = lista.length;
 
-                if (lista.length === 0) {
-                    htmlLista = "<p style='text-align:center; padding:10px; color:#777; font-size:12px;'>Sin resultados.</p>";
-                }
+                if (lista.length === 0) html = "<p style='text-align:center; padding:10px; color:#777;'>Sin resultados.</p>";
 
                 lista.forEach(ev => {
                     let lat = parseFloat(ev.lat);
                     let lon = parseFloat(ev.lon);
-                    if(isNaN(lat) || isNaN(lon)) return;
+                    if(isNaN(lat)) return;
 
-                    // Marcador AZUL (Por defecto)
-                    let marker = L.marker([lat, lon])
-                        .bindPopup(`<b>${ev.hora}</b><br>${ev.nombre}<br><i>${ev.lugar}</i>`);
+                    let marker = L.marker([lat, lon]).bindPopup(`<b>${ev.hora}</b><br>${ev.nombre}`);
                     marker.addTo(map);
                     marcadores[ev.id] = marker;
 
-                    // Tarjeta
-                    const estaAgendado = seleccionadosIDs.has(ev.id);
-                    const claseBoton = estaAgendado ? 'btn-agendar agendado' : 'btn-agendar';
-                    const textoBoton = estaAgendado ? '✅' : 'Agendar';
-                    const textoPrincipal = ev.nombre_completo ? ev.nombre_completo : ev.nombre;
+                    const agendado = seleccionadosIDs.has(ev.id);
+                    const btnClass = agendado ? 'btn-agendar agendado' : 'btn-agendar';
+                    const btnText = agendado ? '✅ Agendado' : 'Agendar';
+                    
+                    // Lógica para mostrar dirección si existe
+                    const direccionMostrar = ev.direccion ? ev.direccion : ev.lugar;
+                    const nombreCompleto = ev.nombre_completo || ev.nombre;
 
-                    htmlLista += `
+                    html += `
                         <div class="evento-card" onclick="resaltarEnMapa('${ev.id}')">
-                            <button id="btn-${ev.id}" class="${claseBoton}" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">
-                                ${textoBoton}
-                            </button>
-                            <div class="meta">🕒 ${ev.hora} | 📍 ${ev.lugar}</div>
-                            <div class="descripcion-completa">${textoPrincipal}</div>
-                        </div>
-                    `;
+                            <button id="btn-${ev.id}" class="${btnClass}" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">${btnText}</button>
+                            <h4>${ev.nombre}</h4>
+                            <span class="meta-hora">🕒 ${ev.hora}</span>
+                            <div class="meta-lugar">📍 ${ev.lugar}</div>
+                            <span class="meta-direccion">${direccionMostrar}</span>
+                            <div class="descripcion-completa">${nombreCompleto}</div>
+                        </div>`;
                 });
-
-                document.getElementById('lista-lateral').innerHTML = htmlLista;
+                document.getElementById('lista-lateral').innerHTML = html;
             }
 
             function resaltarEnMapa(id) {
@@ -313,96 +283,70 @@
                 } else {
                     seleccionadosIDs.add(id);
                     btn.classList.add('agendado');
-                    btn.innerHTML = '✅';
+                    btn.innerHTML = '✅ Agendado';
                 }
                 document.getElementById('lista-ruta-resultado').style.display = 'none';
-                limpiarRutaEnMapa(); // Si cambias selección, borra la ruta vieja
+                limpiarRutaEnMapa();
             }
 
-            // --- FUNCIÓN DE RUTA MEJORADA ---
             window.crearRutaConSeleccionados = function() {
-                let rutaEventos = todosLosEventos.filter(ev => seleccionadosIDs.has(ev.id));
-                if (rutaEventos.length < 2) {
-                    alert("Selecciona al menos 2 eventos.");
-                    return;
-                }
+                let ruta = todosLosEventos.filter(ev => seleccionadosIDs.has(ev.id));
+                if (ruta.length < 2) { alert("Selecciona al menos 2 eventos."); return; }
                 
-                // 1. Ordenar por Hora
-                rutaEventos.sort((a, b) => a.hora.localeCompare(b.hora));
-                
-                // 2. Limpiar mapa actual (ocultar pines azules para poner los numerados)
+                ruta.sort((a, b) => a.hora.localeCompare(b.hora));
                 limpiarRutaEnMapa();
-                for (let id in marcadores) map.removeLayer(marcadores[id]); 
+                for (let id in marcadores) map.removeLayer(marcadores[id]); // Ocultar pines azules
 
                 let latlngs = [];
-
-                // 3. Crear PINES NUMERADOS (1, 2, 3...)
-                rutaEventos.forEach((ev, index) => {
-                    let lat = parseFloat(ev.lat);
-                    let lon = parseFloat(ev.lon);
+                ruta.forEach((ev, i) => {
+                    let lat = parseFloat(ev.lat), lon = parseFloat(ev.lon);
                     latlngs.push([lat, lon]);
-
-                    // Clase especial para el número 1 (verde)
-                    let claseExtra = index === 0 ? 'inicio' : '';
-
-                    let iconoNumero = L.divIcon({
-                        className: 'custom-div-icon',
-                        html: `<div class='icono-numero ${claseExtra}'>${index + 1}</div>`,
-                        iconSize: [25, 25],
-                        iconAnchor: [12, 12]
-                    });
-
-                    let markerNum = L.marker([lat, lon], {icon: iconoNumero})
-                        .bindPopup(`<b>${index + 1}. [${ev.hora}]</b><br>${ev.nombre}`)
-                        .addTo(map);
-                    
-                    marcadoresRuta.push(markerNum);
+                    let cls = i === 0 ? 'inicio' : '';
+                    let icon = L.divIcon({className: 'custom', html: `<div class='icono-numero ${cls}'>${i+1}</div>`, iconSize:[25,25], iconAnchor:[12,12]});
+                    let m = L.marker([lat, lon], {icon: icon}).bindPopup(`<b>${i+1}. ${ev.hora}</b><br>${ev.nombre}`).addTo(map);
+                    marcadoresRuta.push(m);
                 });
 
-                // 4. LÍNEA PUNTEADA
-                lineaRuta = L.polyline(latlngs, {
-                    color: '#007bff', 
-                    weight: 4, 
-                    opacity: 0.8,
-                    dashArray: '10, 10' // <--- ESTO HACE LA LÍNEA PUNTEADA
+                // LÍNEA DE RUTA
+                lineaRuta = L.polyline(latlngs, {color: '#007bff', weight: 4, opacity: 0.8, dashArray: '10, 10'}).addTo(map);
+
+                // FLECHAS MEJORADAS (Visible antes de llegar al punto)
+                flechasRuta = L.polylineDecorator(lineaRuta, {
+                    patterns: [
+                        {
+                            offset: '10%', // Empieza un poco después del inicio
+                            repeat: 0, // No repetir automáticamente en base a distancia
+                            endOffset: '25px', // ¡CLAVE! Termina 25px antes del punto final para que se vea la punta
+                            symbol: L.Symbol.arrowHead({
+                                pixelSize: 15, // Flecha más grande
+                                polygon: false, 
+                                pathOptions: { stroke: true, color: '#007bff', weight: 3 }
+                            })
+                        },
+                        {
+                            // Una segunda flecha en medio del camino si es largo
+                            offset: '50%',
+                            repeat: '300px',
+                            symbol: L.Symbol.arrowHead({ pixelSize: 12, polygon: false, pathOptions: { stroke: true, color: '#007bff', weight: 2 } })
+                        }
+                    ]
                 }).addTo(map);
 
-                // 5. FLECHAS DE DIRECCIÓN (Usando el plugin)
-                try {
-                    flechasRuta = L.polylineDecorator(lineaRuta, {
-                        patterns: [
-                            {
-                                offset: '100%', // Empieza un poco después
-                                repeat: '100px',  // Repetir cada 100 pixeles
-                                symbol: L.Symbol.arrowHead({
-                                    pixelSize: 12, 
-                                    polygon: false, 
-                                    pathOptions: { stroke: true, color: '#007bff', weight: 3 }
-                                })
-                            }
-                        ]
-                    }).addTo(map);
-                } catch(e) { console.log("Error cargando flechas (plugin):", e); }
+                map.fitBounds(lineaRuta.getBounds(), {padding: [50,50]});
 
-                map.fitBounds(lineaRuta.getBounds(), {padding: [50, 50]});
-
-                // 6. Lista lateral
-                let html = "<b>🗓️ Ruta Optimizada:</b><br>";
-                rutaEventos.forEach((e, i) => {
-                    html += `<div style="margin-bottom:5px; border-bottom:1px dotted #ccc; padding-bottom:3px;">
-                                <span style="background:#007bff; color:white; border-radius:50%; padding:2px 6px; font-size:10px;">${i+1}</span>
-                                <b>[${e.hora}]</b> ${e.nombre.substring(0,25)}...
-                             </div>`;
+                // MOSTRAR ITINERARIO
+                let html = "<b>🗓️ Tu Ruta Cultural:</b><br>";
+                ruta.forEach((e, i) => {
+                    html += `<div style="margin-bottom:8px; border-bottom:1px dotted #ccc; padding-bottom:5px;">
+                        <span style="background:${i===0?'#28a745':'#007bff'}; color:white; border-radius:50%; padding:2px 7px; font-size:11px; font-weight:bold;">${i+1}</span>
+                        <b>${e.hora}</b> - ${e.nombre.substring(0,30)}...<br>
+                        <small style="color:#666; margin-left:25px; display:block;">📍 ${e.lugar}</small>
+                    </div>`;
                 });
-                const resDiv = document.getElementById('lista-ruta-resultado');
-                resDiv.innerHTML = html;
-                resDiv.style.display = 'block';
-                resDiv.scrollIntoView({ behavior: 'smooth' });
+                const r = document.getElementById('lista-ruta-resultado');
+                r.innerHTML = html; r.style.display = 'block'; r.scrollIntoView({behavior:'smooth'});
             }
-
-        } catch (error) {
-            alert("Error crítico: " + error.message);
-        }
+        } catch (e) { alert("Error crítico: " + e.message); }
     </script>
 </body>
 </html>
