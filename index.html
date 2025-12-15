@@ -8,82 +8,118 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        /* ESTILOS: Aseguran que la página ocupe el 100% de la pantalla */
-        body, html { margin: 0; padding: 0; font-family: sans-serif; height: 100%; overflow: hidden; }
+        /* --- ESTRUCTURA GENERAL --- */
+        body, html { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; height: 100%; overflow: hidden; }
         
         .main-container {
             display: flex;
-            height: 100vh; /* Altura completa */
+            height: 100vh;
             width: 100%;
         }
 
-        /* BARRA LATERAL */
+        /* --- BARRA LATERAL (AJUSTABLE) --- */
         .sidebar {
-            width: 350px;
-            min-width: 300px;
+            width: 320px;       /* Ancho inicial */
+            min-width: 250px;   /* No puede ser muy angosta */
+            max-width: 50vw;    /* No puede ocupar más de la mitad de la pantalla */
             background: #f8f9fa;
-            padding: 15px;
-            overflow-y: auto; /* Scroll si la lista es larga */
+            padding: 10px;      /* Menos padding general */
+            overflow-y: auto;   /* Scroll vertical */
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            z-index: 1001; /* Asegura que esté sobre el mapa */
+            gap: 8px;
+            z-index: 1001;
+            
+            /* PROPIEDAD MÁGICA PARA REDIMENSIONAR */
+            resize: horizontal; 
+            overflow-x: hidden; /* Evita scroll horizontal feo */
         }
 
-        /* EL MAPA */
-        #map { 
-            flex-grow: 1; 
-            height: 100%; 
-            background: #e0e0e0; /* Fondo gris mientras carga */
+        /* MAPA */
+        #map { flex-grow: 1; height: 100%; background: #e0e0e0; }
+
+        /* --- ESTILOS COMPACTOS --- */
+        .titulo-seccion { font-size: 0.95em; margin-bottom: 3px; color: #444; font-weight: bold; margin-top: 5px;}
+        
+        select.filtro-dia {
+            width: 100%; padding: 6px; background: #fff; border: 1px solid #007bff;
+            border-radius: 4px; font-size: 13px; color: #333; cursor: pointer; font-weight: bold;
         }
 
-        /* Títulos y Botones */
-        .titulo-seccion { font-size: 1.1em; margin-bottom: 5px; color: #333; font-weight: bold; }
-
+        /* Botones de Filtro más compactos */
         .btn-filtro {
-            width: 100%; padding: 10px; cursor: pointer;
-            background: #e9ecef; border: 1px solid #ced4da; border-radius: 4px; text-align: left; font-size: 14px;
-            transition: background 0.2s; margin-bottom: 5px;
+            width: 100%; padding: 6px 10px; cursor: pointer;
+            background: #fff; border: 1px solid #ccc; border-radius: 4px; text-align: left; font-size: 13px;
+            transition: all 0.2s; margin-bottom: 3px;
         }
-        .btn-filtro:hover { background: #dee2e6; }
+        .btn-filtro:hover { background: #f0f0f0; }
         .btn-filtro.activo { background: #007bff; color: white; border-color: #0056b3; }
 
-        /* Menú desplegable de Días */
-        select.filtro-dia {
-            width: 100%; padding: 10px; background: #fff; border: 2px solid #007bff;
-            border-radius: 4px; font-size: 15px; color: #333; cursor: pointer; margin-bottom: 15px; font-weight: bold;
+        /* Contenedor de controles de resultados */
+        .controles-resultados {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 5px;
         }
-
-        /* Botón Ruta */
-        .btn-ruta-final { 
-            background: #28a745; color: white; font-weight: bold; 
-            text-align: center; border: none; padding: 12px;
-            margin-top: 10px; cursor: pointer; width: 100%; border-radius: 4px;
+        
+        .btn-ordenar {
+            background: #6c757d; color: white; border: none; padding: 4px 8px;
+            border-radius: 4px; font-size: 11px; cursor: pointer;
         }
-        .btn-ruta-final:hover { background: #218838; }
+        .btn-ordenar:hover { background: #5a6268; }
 
-        /* Tarjetas de Eventos */
-        .lista-container { margin-top: 10px; }
+        /* --- TARJETAS DE EVENTOS (COMPACTAS) --- */
+        .lista-container { margin-top: 5px; }
+        
         .evento-card {
-            background: white; border: 1px solid #ddd; border-radius: 6px;
-            padding: 12px; margin-bottom: 10px; cursor: pointer;
-            transition: border-color 0.2s, box-shadow 0.2s;
+            background: white; border: 1px solid #ddd; border-radius: 5px;
+            padding: 8px; /* Menos relleno interno */
+            margin-bottom: 8px; 
+            cursor: pointer;
+            transition: border-color 0.2s;
+            position: relative;
         }
-        .evento-card:hover { border-color: #007bff; box-shadow: 0 2px 8px rgba(0,123,255,0.2); }
-        .evento-card h4 { margin: 0 0 5px 0; font-size: 16px; color: #333; }
-        .evento-card .meta { font-size: 0.85em; color: #666; margin-bottom: 8px; }
+        .evento-card:hover { border-color: #007bff; border-left: 3px solid #007bff; }
+        
+        /* Tipografía pequeña */
+        .evento-card h4 { 
+            margin: 0 0 3px 0; 
+            font-size: 13px; /* Título más pequeño */
+            color: #222; 
+            line-height: 1.2;
+        }
+        .evento-card .meta { 
+            font-size: 11px; /* Hora y lugar muy pequeños */
+            color: #007bff; 
+            font-weight: 600;
+            margin-bottom: 4px; 
+        }
+        .evento-card .descripcion-completa { 
+            font-size: 12px; /* Texto descriptivo compacto */
+            color: #555; 
+            margin-bottom: 6px; 
+            line-height: 1.3;
+            text-align: justify;
+        }
         
         .btn-agendar {
-            padding: 6px 12px; font-size: 0.85em; border: 1px solid #007bff;
-            background: white; color: #007bff; border-radius: 20px;
-            cursor: pointer; transition: all 0.2s;
+            padding: 3px 8px; font-size: 11px; border: 1px solid #007bff;
+            background: white; color: #007bff; border-radius: 12px;
+            cursor: pointer; transition: all 0.2s; float: right;
         }
         .btn-agendar.agendado { background: #007bff; color: white; }
 
+        /* Botón Final */
+        .btn-ruta-final { 
+            background: #28a745; color: white; font-weight: bold; font-size: 13px;
+            text-align: center; border: none; padding: 10px;
+            margin-top: 5px; cursor: pointer; width: 100%; border-radius: 4px;
+        }
+        .btn-ruta-final:hover { background: #218838; }
+
         .info-ruta { 
-            margin-top: 15px; font-size: 0.9em; background: #e8f4ff; 
-            padding: 10px; border-radius: 5px; border-left: 4px solid #007bff;
+            margin-top: 10px; font-size: 12px; background: #e8f4ff; 
+            padding: 8px; border-radius: 4px; border-left: 3px solid #007bff;
         }
     </style>
 </head>
@@ -91,14 +127,12 @@
 
     <div class="main-container">
         <div class="sidebar">
-            <div class="titulo-seccion">📅 ¿Cuándo quieres salir?</div>
+            <div class="titulo-seccion">📅 Día</div>
             <select id="select-dias" class="filtro-dia" onchange="cambiarFiltroDia()">
-                <option value="Todos">Ver Todos los Días</option>
+                <option value="Todos">Cargando días...</option>
             </select>
 
-            <hr style="width: 100%; border-color: #ddd;">
-
-            <div class="titulo-seccion">🎭 ¿Qué quieres ver?</div>
+            <div class="titulo-seccion">🎭 Categoría</div>
             <div id="botones-categorias">
                 <button class="btn-filtro activo" onclick="cambiarFiltroCategoria('Todos', this)">👁️ Ver Todo</button>
                 <button class="btn-filtro" onclick="cambiarFiltroCategoria('Teatro', this)">🎭 Teatro</button>
@@ -107,15 +141,19 @@
                 <button class="btn-filtro" onclick="cambiarFiltroCategoria('Arte/Expo', this)">🖼️ Arte / Expo</button>
             </div>
             
-            <hr style="width: 100%; border-color: #ddd;">
+            <hr style="width: 100%; border-color: #eee; margin: 8px 0;">
 
-            <div class="titulo-seccion">Resultados: <span id="contador-eventos">0</span></div>
-            <div id="lista-lateral" class="lista-container">
-                <p style="color:#666">Cargando eventos...</p>
+            <div class="controles-resultados">
+                <div class="titulo-seccion" style="margin:0">Eventos (<span id="contador-eventos">0</span>)</div>
+                <button class="btn-ordenar" onclick="ordenarResultadosPorHora()">🕒 Ordenar por Hora</button>
             </div>
 
-            <hr style="width: 100%; border-color: #ddd;">
-            <button class="btn-ruta-final" onclick="crearRutaConSeleccionados()">🚀 Crear Ruta con Mis Eventos</button>
+            <div id="lista-lateral" class="lista-container">
+                <p style="font-size:12px; color:#666">Cargando datos...</p>
+            </div>
+
+            <hr style="width: 100%; border-color: #eee; margin: 8px 0;">
+            <button class="btn-ruta-final" onclick="crearRutaConSeleccionados()">🚀 Crear Ruta</button>
             <div id="lista-ruta-resultado" class="info-ruta" style="display: none;"></div>
         </div>
 
@@ -127,9 +165,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
     <script>
-        // --- BLOQUE DE SEGURIDAD PARA DETECTAR ERRORES ---
         try {
-            // 1. CONFIGURACIÓN FIREBASE
+            // 1. CONFIGURACIÓN FIREBASE (TUS DATOS)
             const firebaseConfig = {
                 apiKey: "AIzaSyCxwRwF97SheBpKd0bfZ6Gcw8XQH2QwNbc",
                 authDomain: "mapacultural-lima.firebaseapp.com",
@@ -148,38 +185,35 @@
                 attribution: '© OpenStreetMap'
             }).addTo(map);
 
-            // VARIABLES GLOBALES
+            // VARIABLES
             let todosLosEventos = [];
+            let eventosActuales = []; // Lista filtrada actual
             let seleccionadosIDs = new Set();
             let marcadores = {}; 
             let lineaRuta = null;
             let filtroDiaActual = 'Todos';
             let filtroCategoriaActual = 'Todos';
 
-            // 3. DESCARGAR DATOS DE LA NUBE
-            console.log("Iniciando descarga de Firebase...");
+            // 3. DESCARGA
+            console.log("Descargando...");
             db.collection("eventos").get().then((snapshot) => {
                 if (snapshot.empty) {
-                    document.getElementById('lista-lateral').innerHTML = "<p>La base de datos está vacía. Ejecuta el scraper en Python.</p>";
+                    document.getElementById('lista-lateral').innerHTML = "<p>Base de datos vacía.</p>";
                     return;
                 }
-
                 snapshot.forEach((doc) => {
                     let data = doc.data();
                     data.id = doc.id;
                     todosLosEventos.push(data);
                 });
                 
-                console.log(`Se descargaron ${todosLosEventos.length} eventos.`);
-                
-                // Configurar filtros
+                // Inicializar
                 llenarDropdownDias();
                 aplicarFiltrosCombinados();
 
             }).catch((error) => {
-                console.error("Error Firebase:", error);
-                alert("Error conectando a la base de datos: " + error.message);
-                document.getElementById('lista-lateral').innerHTML = "<p style='color:red'>Error de conexión.</p>";
+                console.error(error);
+                alert("Error de conexión: " + error.message);
             });
 
             // --- FUNCIONES ---
@@ -190,13 +224,11 @@
                 todosLosEventos.forEach(ev => { if(ev.dia) diasUnicos.add(ev.dia); });
                 const listaDias = Array.from(diasUnicos).sort();
                 
-                // Limpiar opciones previas (excepto la primera)
-                select.innerHTML = '<option value="Todos">Ver Todos los Días</option>';
-
+                select.innerHTML = '<option value="Todos">📅 Todos los Días</option>';
                 listaDias.forEach(dia => {
                     let option = document.createElement("option");
                     option.value = dia;
-                    option.text = "📅 " + dia;
+                    option.text = dia;
                     select.appendChild(option);
                 });
             }
@@ -215,29 +247,35 @@
             }
 
             function aplicarFiltrosCombinados() {
-                const eventosFiltrados = todosLosEventos.filter(ev => {
+                eventosActuales = todosLosEventos.filter(ev => {
                     const coincideDia = (filtroDiaActual === 'Todos') || (ev.dia === filtroDiaActual);
                     const coincideCat = (filtroCategoriaActual === 'Todos') || (ev.tipo === filtroCategoriaActual);
                     return coincideDia && coincideCat;
                 });
-                actualizarVista(eventosFiltrados);
+                actualizarVista(eventosActuales);
             }
 
-            function actualizarVista(listaDeEventos) {
-                // Limpiar mapa
+            // NUEVA FUNCIÓN: ORDENAR POR HORA
+            function ordenarResultadosPorHora() {
+                eventosActuales.sort((a, b) => a.hora.localeCompare(b.hora));
+                actualizarVista(eventosActuales);
+            }
+
+            function actualizarVista(lista) {
+                // Limpiar
                 for (let id in marcadores) map.removeLayer(marcadores[id]);
                 marcadores = {};
                 if(lineaRuta) map.removeLayer(lineaRuta);
                 document.getElementById('lista-ruta-resultado').style.display = 'none';
 
                 let htmlLista = "";
-                document.getElementById('contador-eventos').innerText = listaDeEventos.length;
+                document.getElementById('contador-eventos').innerText = lista.length;
 
-                if (listaDeEventos.length === 0) {
-                    htmlLista = "<p style='text-align:center; padding:20px; color:#777;'>No se encontraron eventos con estos filtros.</p>";
+                if (lista.length === 0) {
+                    htmlLista = "<p style='text-align:center; padding:10px; color:#777; font-size:12px;'>Sin resultados.</p>";
                 }
 
-                listaDeEventos.forEach(ev => {
+                lista.forEach(ev => {
                     let lat = parseFloat(ev.lat);
                     let lon = parseFloat(ev.lon);
                     if(isNaN(lat) || isNaN(lon)) return;
@@ -251,15 +289,18 @@
                     // Tarjeta
                     const estaAgendado = seleccionadosIDs.has(ev.id);
                     const claseBoton = estaAgendado ? 'btn-agendar agendado' : 'btn-agendar';
-                    const textoBoton = estaAgendado ? '✅ Agendado' : 'Agendar';
+                    const textoBoton = estaAgendado ? '✅' : 'Agendar';
+                    
+                    // LÓGICA DE TEXTO: Usamos nombre_completo si existe, sino nombre
+                    const textoPrincipal = ev.nombre_completo ? ev.nombre_completo : ev.nombre;
 
                     htmlLista += `
                         <div class="evento-card" onclick="resaltarEnMapa('${ev.id}')">
-                            <h4>${ev.nombre}</h4>
-                            <div class="meta">🕒 ${ev.hora} | ${ev.dia || ''} <br> 📍 ${ev.lugar}</div>
                             <button id="btn-${ev.id}" class="${claseBoton}" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">
                                 ${textoBoton}
                             </button>
+                            <div class="meta">🕒 ${ev.hora} | 📍 ${ev.lugar}</div>
+                            <div class="descripcion-completa">${textoPrincipal}</div>
                         </div>
                     `;
                 });
@@ -284,7 +325,7 @@
                 } else {
                     seleccionadosIDs.add(id);
                     btn.classList.add('agendado');
-                    btn.innerHTML = '✅ Agendado';
+                    btn.innerHTML = '✅';
                 }
                 document.getElementById('lista-ruta-resultado').style.display = 'none';
                 if(lineaRuta) map.removeLayer(lineaRuta);
@@ -293,7 +334,7 @@
             window.crearRutaConSeleccionados = function() {
                 let rutaEventos = todosLosEventos.filter(ev => seleccionadosIDs.has(ev.id));
                 if (rutaEventos.length < 2) {
-                    alert("Selecciona al menos 2 eventos para crear una ruta.");
+                    alert("Selecciona al menos 2 eventos.");
                     return;
                 }
                 rutaEventos.sort((a, b) => a.hora.localeCompare(b.hora));
@@ -303,10 +344,11 @@
                 lineaRuta = L.polyline(latlngs, {color: '#007bff', weight: 5, opacity: 0.8}).addTo(map);
                 map.fitBounds(lineaRuta.getBounds(), {padding: [50, 50]});
 
-                let html = "<b>🗓️ Tu Itinerario:</b><br><br>";
+                let html = "<b>🗓️ Ruta Sugerida:</b><br>";
                 rutaEventos.forEach((e, i) => {
-                    html += `<div style="margin-bottom:10px; border-bottom:1px dotted #ccc;">
-                                <b>${i+1}. [${e.hora}]</b> ${e.nombre}<br><small>📍 ${e.lugar}</small>
+                    html += `<div style="margin-bottom:5px; border-bottom:1px dotted #ccc; padding-bottom:3px;">
+                                <b>${i+1}. [${e.hora}]</b> ${e.nombre.substring(0,30)}...<br>
+                                <small>📍 ${e.lugar}</small>
                              </div>`;
                 });
                 const resDiv = document.getElementById('lista-ruta-resultado');
@@ -315,9 +357,8 @@
                 resDiv.scrollIntoView({ behavior: 'smooth' });
             }
 
-        } catch (errorCrítico) {
-            alert("⚠️ Error Crítico en el código: " + errorCrítico.message);
-            console.error(errorCrítico);
+        } catch (error) {
+            alert("Error crítico: " + error.message);
         }
     </script>
 </body>
