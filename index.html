@@ -8,48 +8,132 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; }
-        #map { height: 100vh; width: 100%; z-index: 1; }
+        /* --- NUEVA ESTRUCTURA PRINCIPAL --- */
+        body, html { margin: 0; padding: 0; font-family: sans-serif; height: 100%; }
+        
+        /* Contenedor flexible: Barra lateral a la izquierda, Mapa a la derecha */
+        .main-container {
+            display: flex;
+            height: 100vh; /* Altura completa de la ventana */
+            width: 100%;
+        }
 
-        /* Panel Flotante */
-        .panel {
-            position: absolute; top: 10px; right: 10px; 
-            z-index: 1000; background: white; padding: 15px; 
-            border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
-            width: 250px; max-height: 90vh; overflow-y: auto;
+        /* --- BARRA LATERAL IZQUIERDA --- */
+        .sidebar {
+            width: 350px; /* Ancho fijo */
+            min-width: 300px;
+            background: #f8f9fa;
+            padding: 15px;
+            overflow-y: auto; /* Barra de desplazamiento si es muy larga */
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
-        button {
-            width: 100%; padding: 10px; margin-bottom: 5px; cursor: pointer;
-            background: #f0f0f0; border: none; border-radius: 4px; text-align: left;
+
+        /* --- EL MAPA --- */
+        #map {
+            flex-grow: 1; /* Ocupa todo el espacio restante */
+            height: 100%;
         }
-        button:hover { background: #e0e0e0; }
-        .btn-ruta { background: #4CAF50; color: white; font-weight: bold; margin-top: 10px; text-align: center; }
-        .info-ruta { margin-top: 15px; font-size: 0.9em; border-top: 1px solid #ccc; padding-top: 10px; }
+
+        /* Estilos de Botones del Menú */
+        .btn-filtro {
+            width: 100%; padding: 10px; cursor: pointer;
+            background: #e9ecef; border: 1px solid #ced4da; border-radius: 4px; text-align: left; font-size: 14px;
+            transition: background 0.2s;
+        }
+        .btn-filtro:hover { background: #dee2e6; }
+        
+        .btn-ruta-final { 
+            background: #28a745; color: white; font-weight: bold; 
+            text-align: center; border: none; padding: 12px;
+            margin-top: 10px;
+        }
+        .btn-ruta-final:hover { background: #218838; }
+
+        /* --- NUEVOS ESTILOS: TARJETAS DE EVENTOS EN LA LISTA --- */
+        .lista-container { margin-top: 20px; }
+        
+        .evento-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer; /* Manito al pasar el mouse */
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .evento-card:hover {
+            border-color: #007bff;
+            box-shadow: 0 2px 8px rgba(0,123,255,0.2);
+        }
+        .evento-card h4 { margin: 0 0 5px 0; font-size: 16px; color: #333; }
+        .evento-card .meta { font-size: 0.85em; color: #666; margin-bottom: 8px; }
+        .evento-card .descripcion-completa { font-size: 0.9em; color: #444; margin-bottom: 10px; line-height: 1.4; }
+        
+        /* Botón "Agendar" pequeño */
+        .btn-agendar {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            border: 1px solid #007bff;
+            background: white;
+            color: #007bff;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        /* Estado cuando está seleccionado */
+        .btn-agendar.agendado {
+            background: #007bff;
+            color: white;
+        }
+
+        /* Sección de resultados de la ruta */
+        .info-ruta { 
+            margin-top: 15px; font-size: 0.9em; 
+            background: #e8f4ff; padding: 10px; border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
     </style>
 </head>
 <body>
 
-    <div class="panel">
-        <h3>🎭 Filtros</h3>
-        <button onclick="filtrar('Todos')">👁️ Ver Todo</button>
-        <button onclick="filtrar('Teatro')">🎭 Teatro</button>
-        <button onclick="filtrar('Música')">🎵 Música</button>
-        <button onclick="filtrar('Arte')">🖼️ Arte / Expo</button>
-        <hr>
-        <button class="btn-ruta" onclick="crearRuta()">🚀 Crear Ruta por Hora</button>
-        <div id="lista-ruta" class="info-ruta"></div>
+    <div class="main-container">
+        <div class="sidebar">
+            <h3>🎭 Filtros</h3>
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+                <button class="btn-filtro" onclick="filtrar('Todos')">👁️ Ver Todo</button>
+                <button class="btn-filtro" onclick="filtrar('Teatro')">🎭 Teatro</button>
+                <button class="btn-filtro" onclick="filtrar('Música')">🎵 Música</button>
+                <button class="btn-filtro" onclick="filtrar('Cine')">🎬 Cine</button>
+                <button class="btn-filtro" onclick="filtrar('Arte/Expo')">🖼️ Arte / Expo</button>
+            </div>
+            
+            <hr style="width: 100%; border-color: #ddd;">
+
+            <h3>📅 Eventos Disponibles</h3>
+            <div id="lista-lateral" class="lista-container">
+                <p style="color:#666">Cargando eventos...</p>
+            </div>
+
+            <hr style="width: 100%; border-color: #ddd;">
+            
+            <button class="btn-ruta-final" onclick="crearRutaConSeleccionados()">🚀 Crear Ruta con Mis Eventos</button>
+            
+            <div id="lista-ruta-resultado" class="info-ruta" style="display: none;"></div>
+        </div>
+
+        <div id="map"></div>
     </div>
 
-    <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
     <script>
-        // ==========================================
-        // TUS CLAVES REALES (Ya configuradas)
-        // ==========================================
+        // TUS CLAVES REALES
         const firebaseConfig = {
             apiKey: "AIzaSyCxwRwF97SheBpKd0bfZ6Gcw8XQH2QwNbc",
             authDomain: "mapacultural-lima.firebaseapp.com",
@@ -59,76 +143,158 @@
             appId: "1:170254428690:web:0b7dbd02636b6af29446cb"
         };
 
-        // 1. Iniciar Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // 2. Iniciar Mapa
-        const map = L.map('map').setView([-12.046, -77.042], 12); // Lima
+        // Iniciar Mapa
+        const map = L.map('map').setView([-12.046, -77.042], 13); // Un poco más de zoom inicial
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        let eventos = [];
-        let marcadores = [];
+        // Variables globales
+        let todosLosEventos = []; // Todos los descargados
+        let eventosFiltrados = []; // Los que se ven actualmente según el filtro
+        let seleccionadosIDs = new Set(); // MEMORIA: Guarda los IDs de los eventos que el usuario quiere agendar
+        let marcadores = {}; // Diccionario para buscar marcadores por ID rápido
         let lineaRuta = null;
 
-        // 3. Descargar eventos
+        // 1. Descargar eventos y asignarles un ID único
         db.collection("eventos").get().then((snapshot) => {
             snapshot.forEach((doc) => {
-                eventos.push(doc.data());
+                let data = doc.data();
+                data.id = doc.id; // Usamos el ID del documento de Firestore
+                todosLosEventos.push(data);
             });
-            mostrarMapa(eventos);
+            // Al inicio mostramos todos
+            eventosFiltrados = todosLosEventos;
+            actualizarVista(eventosFiltrados);
         });
 
-        // 4. Mostrar puntos
-        function mostrarMapa(lista) {
-            marcadores.forEach(m => map.removeLayer(m));
+        // --- FUNCIÓN PRINCIPAL QUE ACTUALIZA MAPA Y LISTA LATERAL ---
+        function actualizarVista(listaDeEventos) {
+            // A) Limpiar mapa
+            for (let id in marcadores) map.removeLayer(marcadores[id]);
+            marcadores = {};
             if(lineaRuta) map.removeLayer(lineaRuta);
-            marcadores = [];
-            document.getElementById('lista-ruta').innerHTML = "";
+            document.getElementById('lista-ruta-resultado').style.display = 'none';
 
-            lista.forEach(ev => {
-                // Validación para evitar errores si lat/lon no son números
+            // B) Generar HTML para la lista lateral
+            let htmlLista = "";
+            if (listaDeEventos.length === 0) htmlLista = "<p>No se encontraron eventos.</p>";
+
+            listaDeEventos.forEach(ev => {
+                // Validación de coordenadas
                 let lat = parseFloat(ev.lat);
                 let lon = parseFloat(ev.lon);
-                if(!isNaN(lat) && !isNaN(lon)) {
-                    let marker = L.marker([lat, lon])
-                        .bindPopup(`<b>${ev.nombre}</b><br>🕒 ${ev.hora}<br>📍 ${ev.lugar}`)
-                        .addTo(map);
-                    marcadores.push(marker);
-                }
+                if(isNaN(lat) || isNaN(lon)) return;
+
+                // 1. Crear marcador en el mapa
+                let marker = L.marker([lat, lon])
+                    .bindPopup(`<b>${ev.hora}</b><br>${ev.nombre}<br><i>${ev.lugar}</i>`);
+                marker.addTo(map);
+                marcadores[ev.id] = marker; // Guardamos referencia
+
+                // 2. Crear tarjeta en la lista lateral
+                // Verificamos si ya estaba seleccionado
+                const estaAgendado = seleccionadosIDs.has(ev.id);
+                const claseBoton = estaAgendado ? 'btn-agendar agendado' : 'btn-agendar';
+                const textoBoton = estaAgendado ? '✅ Agendado' : 'Agendar';
+
+                htmlLista += `
+                    <div class="evento-card" onclick="resaltarEnMapa('${ev.id}')">
+                        <h4>${ev.nombre}</h4>
+                        <div class="meta">🕒 ${ev.hora} | 📅 ${ev.dia || ''} <br> 📍 ${ev.lugar}</div>
+                        <div class="descripcion-completa">${ev.nombre_completo}</div>
+                        <button id="btn-${ev.id}" class="${claseBoton}" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">
+                            ${textoBoton}
+                        </button>
+                    </div>
+                `;
             });
+
+            // C) Insertar el HTML en la barra lateral
+            document.getElementById('lista-lateral').innerHTML = htmlLista;
         }
 
-        // 5. Filtros
+        // --- FUNCIONES DE INTERACCIÓN ---
+
+        // Filtros
         function filtrar(tipo) {
-            if(tipo === 'Todos') mostrarMapa(eventos);
-            else mostrarMapa(eventos.filter(e => e.tipo === tipo));
+            if(tipo === 'Todos') {
+                eventosFiltrados = todosLosEventos;
+            } else {
+                eventosFiltrados = todosLosEventos.filter(e => e.tipo === tipo);
+            }
+            actualizarVista(eventosFiltrados);
         }
 
-        // 6. Tu Algoritmo de Ruta
-        function crearRuta() {
-            let ruta = [...eventos].sort((a, b) => a.hora.localeCompare(b.hora));
-            
-            let latlngs = [];
-            ruta.forEach(e => {
-                let lat = parseFloat(e.lat);
-                let lon = parseFloat(e.lon);
-                if(!isNaN(lat) && !isNaN(lon)) latlngs.push([lat, lon]);
-            });
+        // Al hacer clic en la tarjeta lateral, el mapa viaja al marcador
+        function resaltarEnMapa(id) {
+            const marker = marcadores[id];
+            if (marker) {
+                map.flyTo(marker.getLatLng(), 16, { duration: 1.5 }); // Zoom suave
+                marker.openPopup();
+            }
+        }
 
-            if(lineaRuta) map.removeLayer(lineaRuta);
-            if(latlngs.length > 0) {
-                lineaRuta = L.polyline(latlngs, {color: 'blue', weight: 4, dashArray: '10,5'}).addTo(map);
-                map.fitBounds(lineaRuta.getBounds());
+        // Función del botón "Agendar" / "Desagendar"
+        function toggleAgendar(id) {
+            const btn = document.getElementById(`btn-${id}`);
+            
+            if (seleccionadosIDs.has(id)) {
+                // Si ya estaba, lo quitamos
+                seleccionadosIDs.delete(id);
+                btn.classList.remove('agendado');
+                btn.innerHTML = 'Agendar';
+            } else {
+                // Si no estaba, lo agregamos
+                seleccionadosIDs.add(id);
+                btn.classList.add('agendado');
+                btn.innerHTML = '✅ Agendado';
+            }
+            // Ocultamos resultado de ruta anterior si cambia la selección
+            document.getElementById('lista-ruta-resultado').style.display = 'none';
+             if(lineaRuta) map.removeLayer(lineaRuta);
+        }
+
+        // --- ALGORITMO DE RUTA FINAL ---
+        function crearRutaConSeleccionados() {
+            // 1. Filtramos solo los eventos cuyos IDs están en el Set de seleccionados
+            let rutaEventos = todosLosEventos.filter(ev => seleccionadosIDs.has(ev.id));
+
+            if (rutaEventos.length < 2) {
+                alert("Por favor, agenda al menos 2 eventos para crear una ruta.");
+                return;
             }
 
-            let html = "<b>🗓️ Itinerario:</b><br>";
-            ruta.forEach((e, i) => {
-                html += `<div style="margin-bottom:5px;">${i+1}. <b>${e.hora}</b> ${e.nombre}</div>`;
+            // 2. Ordenar por hora (Lo más robusto por ahora)
+            // Nota sobre cercanía: Ordenar por tiempo Y cercanía a la vez es un problema matemático complejo.
+            // Para esta versión, el orden cronológico es el más sensato para una agenda cultural.
+            rutaEventos.sort((a, b) => a.hora.localeCompare(b.hora));
+            
+            // 3. Dibujar línea
+            let latlngs = rutaEventos.map(e => [parseFloat(e.lat), parseFloat(e.lon)]);
+            
+            if(lineaRuta) map.removeLayer(lineaRuta);
+            // Línea azul más gruesa para que resalte
+            lineaRuta = L.polyline(latlngs, {color: '#007bff', weight: 5, opacity: 0.8}).addTo(map);
+            map.fitBounds(lineaRuta.getBounds(), {padding: [50, 50]}); // Enfocar la ruta con margen
+
+            // 4. Mostrar el itinerario final textual en la barra lateral
+            let html = "<b>🗓️ Tu Itinerario Cultural:</b><br><br>";
+            rutaEventos.forEach((e, i) => {
+                html += `
+                    <div style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px dotted #ccc;">
+                        <b>${i+1}. [${e.hora}]</b> ${e.nombre}<br>
+                        <small>📍 ${e.lugar}</small>
+                    </div>`;
             });
-            document.getElementById('lista-ruta').innerHTML = html;
+            const resultadoDiv = document.getElementById('lista-ruta-resultado');
+            resultadoDiv.innerHTML = html;
+            resultadoDiv.style.display = 'block';
+            // Hacer scroll automático hacia el resultado
+            resultadoDiv.scrollIntoView({ behavior: 'smooth' });
         }
     </script>
 </body>
