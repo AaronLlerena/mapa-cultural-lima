@@ -8,88 +8,82 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        /* --- NUEVA ESTRUCTURA PRINCIPAL --- */
+        /* --- ESTRUCTURA PRINCIPAL --- */
         body, html { margin: 0; padding: 0; font-family: sans-serif; height: 100%; }
         
-        /* Contenedor flexible: Barra lateral a la izquierda, Mapa a la derecha */
         .main-container {
             display: flex;
-            height: 100vh; /* Altura completa de la ventana */
+            height: 100vh;
             width: 100%;
         }
 
-        /* --- BARRA LATERAL IZQUIERDA --- */
+        /* --- BARRA LATERAL --- */
         .sidebar {
-            width: 350px; /* Ancho fijo */
+            width: 350px;
             min-width: 300px;
             background: #f8f9fa;
             padding: 15px;
-            overflow-y: auto; /* Barra de desplazamiento si es muy larga */
+            overflow-y: auto;
             box-shadow: 2px 0 5px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
             gap: 10px;
         }
 
-        /* --- EL MAPA --- */
-        #map {
-            flex-grow: 1; /* Ocupa todo el espacio restante */
-            height: 100%;
-        }
+        #map { flex-grow: 1; height: 100%; }
 
-        /* Estilos de Botones del Menú */
+        /* Estilos de Botones y Selects */
+        .titulo-seccion { font-size: 1.1em; margin-bottom: 5px; color: #333; font-weight: bold; }
+
         .btn-filtro {
             width: 100%; padding: 10px; cursor: pointer;
             background: #e9ecef; border: 1px solid #ced4da; border-radius: 4px; text-align: left; font-size: 14px;
             transition: background 0.2s;
+            margin-bottom: 5px;
         }
         .btn-filtro:hover { background: #dee2e6; }
         
+        /* Estilo para el botón activo */
+        .btn-filtro.activo {
+            background: #007bff; color: white; border-color: #0056b3;
+        }
+
+        /* NUEVO: Estilo del Menú Desplegable de Días */
+        select.filtro-dia {
+            width: 100%; padding: 10px;
+            background: #fff; border: 2px solid #007bff; border-radius: 4px;
+            font-size: 15px; color: #333; cursor: pointer;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
         .btn-ruta-final { 
             background: #28a745; color: white; font-weight: bold; 
             text-align: center; border: none; padding: 12px;
-            margin-top: 10px;
+            margin-top: 10px; cursor: pointer; width: 100%; border-radius: 4px;
         }
         .btn-ruta-final:hover { background: #218838; }
 
-        /* --- NUEVOS ESTILOS: TARJETAS DE EVENTOS EN LA LISTA --- */
-        .lista-container { margin-top: 20px; }
+        /* --- TARJETAS DE EVENTOS --- */
+        .lista-container { margin-top: 10px; }
         
         .evento-card {
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 10px;
-            cursor: pointer; /* Manito al pasar el mouse */
+            background: white; border: 1px solid #ddd; border-radius: 6px;
+            padding: 12px; margin-bottom: 10px; cursor: pointer;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .evento-card:hover {
-            border-color: #007bff;
-            box-shadow: 0 2px 8px rgba(0,123,255,0.2);
-        }
+        .evento-card:hover { border-color: #007bff; box-shadow: 0 2px 8px rgba(0,123,255,0.2); }
         .evento-card h4 { margin: 0 0 5px 0; font-size: 16px; color: #333; }
         .evento-card .meta { font-size: 0.85em; color: #666; margin-bottom: 8px; }
         .evento-card .descripcion-completa { font-size: 0.9em; color: #444; margin-bottom: 10px; line-height: 1.4; }
         
-        /* Botón "Agendar" pequeño */
         .btn-agendar {
-            padding: 6px 12px;
-            font-size: 0.85em;
-            border: 1px solid #007bff;
-            background: white;
-            color: #007bff;
-            border-radius: 20px;
-            cursor: pointer;
-            transition: all 0.2s;
+            padding: 6px 12px; font-size: 0.85em; border: 1px solid #007bff;
+            background: white; color: #007bff; border-radius: 20px;
+            cursor: pointer; transition: all 0.2s;
         }
-        /* Estado cuando está seleccionado */
-        .btn-agendar.agendado {
-            background: #007bff;
-            color: white;
-        }
+        .btn-agendar.agendado { background: #007bff; color: white; }
 
-        /* Sección de resultados de la ruta */
         .info-ruta { 
             margin-top: 15px; font-size: 0.9em; 
             background: #e8f4ff; padding: 10px; border-radius: 5px;
@@ -101,26 +95,33 @@
 
     <div class="main-container">
         <div class="sidebar">
-            <h3>🎭 Filtros</h3>
-            <div style="display: flex; flex-direction: column; gap: 5px;">
-                <button class="btn-filtro" onclick="filtrar('Todos')">👁️ Ver Todo</button>
-                <button class="btn-filtro" onclick="filtrar('Teatro')">🎭 Teatro</button>
-                <button class="btn-filtro" onclick="filtrar('Música')">🎵 Música</button>
-                <button class="btn-filtro" onclick="filtrar('Cine')">🎬 Cine</button>
-                <button class="btn-filtro" onclick="filtrar('Arte/Expo')">🖼️ Arte / Expo</button>
+            
+            <div class="titulo-seccion">📅 ¿Cuándo quieres salir?</div>
+            <select id="select-dias" class="filtro-dia" onchange="cambiarFiltroDia()">
+                <option value="Todos">Ver Todos los Días</option>
+                </select>
+
+            <hr style="width: 100%; border-color: #ddd;">
+
+            <div class="titulo-seccion">🎭 ¿Qué quieres ver?</div>
+            <div id="botones-categorias">
+                <button class="btn-filtro activo" onclick="cambiarFiltroCategoria('Todos', this)">👁️ Ver Todo</button>
+                <button class="btn-filtro" onclick="cambiarFiltroCategoria('Teatro', this)">🎭 Teatro</button>
+                <button class="btn-filtro" onclick="cambiarFiltroCategoria('Música', this)">🎵 Música</button>
+                <button class="btn-filtro" onclick="cambiarFiltroCategoria('Cine', this)">🎬 Cine</button>
+                <button class="btn-filtro" onclick="cambiarFiltroCategoria('Arte/Expo', this)">🖼️ Arte / Expo</button>
             </div>
             
             <hr style="width: 100%; border-color: #ddd;">
 
-            <h3>📅 Eventos Disponibles</h3>
+            <div class="titulo-seccion">Resultados: <span id="contador-eventos">0</span></div>
             <div id="lista-lateral" class="lista-container">
-                <p style="color:#666">Cargando eventos...</p>
+                <p style="color:#666">Cargando...</p>
             </div>
 
             <hr style="width: 100%; border-color: #ddd;">
             
             <button class="btn-ruta-final" onclick="crearRutaConSeleccionados()">🚀 Crear Ruta con Mis Eventos</button>
-            
             <div id="lista-ruta-resultado" class="info-ruta" style="display: none;"></div>
         </div>
 
@@ -133,7 +134,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
     <script>
-        // TUS CLAVES REALES
+        // CONFIGURACIÓN FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyCxwRwF97SheBpKd0bfZ6Gcw8XQH2QwNbc",
             authDomain: "mapacultural-lima.firebaseapp.com",
@@ -146,57 +147,120 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // Iniciar Mapa
-        const map = L.map('map').setView([-12.046, -77.042], 13); // Un poco más de zoom inicial
+        // INICIAR MAPA
+        const map = L.map('map').setView([-12.046, -77.042], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // Variables globales
-        let todosLosEventos = []; // Todos los descargados
-        let eventosFiltrados = []; // Los que se ven actualmente según el filtro
-        let seleccionadosIDs = new Set(); // MEMORIA: Guarda los IDs de los eventos que el usuario quiere agendar
-        let marcadores = {}; // Diccionario para buscar marcadores por ID rápido
+        // VARIABLES GLOBALES
+        let todosLosEventos = [];
+        let seleccionadosIDs = new Set();
+        let marcadores = {}; 
         let lineaRuta = null;
 
-        // 1. Descargar eventos y asignarles un ID único
+        // ESTADO DE LOS FILTROS
+        let filtroDiaActual = 'Todos';
+        let filtroCategoriaActual = 'Todos';
+
+        // 1. DESCARGAR EVENTOS
         db.collection("eventos").get().then((snapshot) => {
             snapshot.forEach((doc) => {
                 let data = doc.data();
-                data.id = doc.id; // Usamos el ID del documento de Firestore
+                data.id = doc.id;
                 todosLosEventos.push(data);
             });
-            // Al inicio mostramos todos
-            eventosFiltrados = todosLosEventos;
-            actualizarVista(eventosFiltrados);
+            
+            // Una vez descargados, configuramos la vista inicial
+            llenarDropdownDias(); // <--- NUEVO: Detecta los días automáticamente
+            aplicarFiltrosCombinados();
         });
 
-        // --- FUNCIÓN PRINCIPAL QUE ACTUALIZA MAPA Y LISTA LATERAL ---
+        // --- NUEVA FUNCIÓN: Llenar el menú de días automáticamente ---
+        function llenarDropdownDias() {
+            const select = document.getElementById('select-dias');
+            // Usamos un Set para obtener días únicos (evitar repetidos)
+            const diasUnicos = new Set();
+            
+            todosLosEventos.forEach(ev => {
+                if(ev.dia) diasUnicos.add(ev.dia);
+            });
+
+            // Ordenamos los días (alfabéticamente sirve para Lunes, Martes...)
+            const listaDias = Array.from(diasUnicos).sort();
+
+            // Creamos las opciones en el HTML
+            listaDias.forEach(dia => {
+                let option = document.createElement("option");
+                option.value = dia;
+                option.text = "📅 " + dia;
+                select.appendChild(option);
+            });
+        }
+
+        // --- GESTIÓN DE FILTROS ---
+        
+        // Cuando cambias el Select de Día
+        function cambiarFiltroDia() {
+            filtroDiaActual = document.getElementById('select-dias').value;
+            aplicarFiltrosCombinados();
+        }
+
+        // Cuando haces click en un botón de Categoría
+        function cambiarFiltroCategoria(categoria, botonPresionado) {
+            filtroCategoriaActual = categoria;
+            
+            // Actualizar estilo visual de los botones (quitar activo a todos, poner al presionado)
+            const botones = document.querySelectorAll('#botones-categorias .btn-filtro');
+            botones.forEach(btn => btn.classList.remove('activo'));
+            botonPresionado.classList.add('activo');
+
+            aplicarFiltrosCombinados();
+        }
+
+        // EL CEREBRO DE LOS FILTROS: Combina Día + Categoría
+        function aplicarFiltrosCombinados() {
+            const eventosFiltrados = todosLosEventos.filter(ev => {
+                // Condición 1: Coincide el día? (o está en 'Todos')
+                const coincideDia = (filtroDiaActual === 'Todos') || (ev.dia === filtroDiaActual);
+                
+                // Condición 2: Coincide la categoría? (o está en 'Todos')
+                const coincideCat = (filtroCategoriaActual === 'Todos') || (ev.tipo === filtroCategoriaActual);
+
+                // Deben cumplirse AMBAS
+                return coincideDia && coincideCat;
+            });
+
+            actualizarVista(eventosFiltrados);
+        }
+
+        // --- ACTUALIZAR MAPA Y LISTA ---
         function actualizarVista(listaDeEventos) {
-            // A) Limpiar mapa
+            // Limpiar todo
             for (let id in marcadores) map.removeLayer(marcadores[id]);
             marcadores = {};
             if(lineaRuta) map.removeLayer(lineaRuta);
             document.getElementById('lista-ruta-resultado').style.display = 'none';
 
-            // B) Generar HTML para la lista lateral
             let htmlLista = "";
-            if (listaDeEventos.length === 0) htmlLista = "<p>No se encontraron eventos.</p>";
+            document.getElementById('contador-eventos').innerText = listaDeEventos.length;
+
+            if (listaDeEventos.length === 0) {
+                htmlLista = "<p style='text-align:center; padding:20px;'>No hay eventos con estos filtros 😢</p>";
+            }
 
             listaDeEventos.forEach(ev => {
-                // Validación de coordenadas
                 let lat = parseFloat(ev.lat);
                 let lon = parseFloat(ev.lon);
                 if(isNaN(lat) || isNaN(lon)) return;
 
-                // 1. Crear marcador en el mapa
+                // Marcador
                 let marker = L.marker([lat, lon])
                     .bindPopup(`<b>${ev.hora}</b><br>${ev.nombre}<br><i>${ev.lugar}</i>`);
                 marker.addTo(map);
-                marcadores[ev.id] = marker; // Guardamos referencia
+                marcadores[ev.id] = marker;
 
-                // 2. Crear tarjeta en la lista lateral
-                // Verificamos si ya estaba seleccionado
+                // Tarjeta HTML
                 const estaAgendado = seleccionadosIDs.has(ev.id);
                 const claseBoton = estaAgendado ? 'btn-agendar agendado' : 'btn-agendar';
                 const textoBoton = estaAgendado ? '✅ Agendado' : 'Agendar';
@@ -204,7 +268,7 @@
                 htmlLista += `
                     <div class="evento-card" onclick="resaltarEnMapa('${ev.id}')">
                         <h4>${ev.nombre}</h4>
-                        <div class="meta">🕒 ${ev.hora} | 📅 ${ev.dia || ''} <br> 📍 ${ev.lugar}</div>
+                        <div class="meta">🕒 ${ev.hora} | ${ev.dia || ''} <br> 📍 ${ev.lugar}</div>
                         <div class="descripcion-completa">${ev.nombre_completo}</div>
                         <button id="btn-${ev.id}" class="${claseBoton}" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">
                             ${textoBoton}
@@ -213,89 +277,44 @@
                 `;
             });
 
-            // C) Insertar el HTML en la barra lateral
             document.getElementById('lista-lateral').innerHTML = htmlLista;
         }
 
-        // --- FUNCIONES DE INTERACCIÓN ---
+        // --- INTERACCIONES Y RUTA (Igual que antes) ---
 
-        // Filtros
-        function filtrar(tipo) {
-            if(tipo === 'Todos') {
-                eventosFiltrados = todosLosEventos;
-            } else {
-                eventosFiltrados = todosLosEventos.filter(e => e.tipo === tipo);
-            }
-            actualizarVista(eventosFiltrados);
-        }
-
-        // Al hacer clic en la tarjeta lateral, el mapa viaja al marcador
         function resaltarEnMapa(id) {
             const marker = marcadores[id];
             if (marker) {
-                map.flyTo(marker.getLatLng(), 16, { duration: 1.5 }); // Zoom suave
+                map.flyTo(marker.getLatLng(), 16, { duration: 1.5 });
                 marker.openPopup();
             }
         }
 
-        // Función del botón "Agendar" / "Desagendar"
         function toggleAgendar(id) {
             const btn = document.getElementById(`btn-${id}`);
-            
             if (seleccionadosIDs.has(id)) {
-                // Si ya estaba, lo quitamos
                 seleccionadosIDs.delete(id);
                 btn.classList.remove('agendado');
                 btn.innerHTML = 'Agendar';
             } else {
-                // Si no estaba, lo agregamos
                 seleccionadosIDs.add(id);
                 btn.classList.add('agendado');
                 btn.innerHTML = '✅ Agendado';
             }
-            // Ocultamos resultado de ruta anterior si cambia la selección
             document.getElementById('lista-ruta-resultado').style.display = 'none';
-             if(lineaRuta) map.removeLayer(lineaRuta);
+            if(lineaRuta) map.removeLayer(lineaRuta);
         }
 
-        // --- ALGORITMO DE RUTA FINAL ---
         function crearRutaConSeleccionados() {
-            // 1. Filtramos solo los eventos cuyos IDs están en el Set de seleccionados
             let rutaEventos = todosLosEventos.filter(ev => seleccionadosIDs.has(ev.id));
 
             if (rutaEventos.length < 2) {
-                alert("Por favor, agenda al menos 2 eventos para crear una ruta.");
+                alert("Agenda al menos 2 eventos para crear una ruta.");
                 return;
             }
 
-            // 2. Ordenar por hora (Lo más robusto por ahora)
-            // Nota sobre cercanía: Ordenar por tiempo Y cercanía a la vez es un problema matemático complejo.
-            // Para esta versión, el orden cronológico es el más sensato para una agenda cultural.
+            // Ordenar por hora
             rutaEventos.sort((a, b) => a.hora.localeCompare(b.hora));
             
-            // 3. Dibujar línea
-            let latlngs = rutaEventos.map(e => [parseFloat(e.lat), parseFloat(e.lon)]);
-            
-            if(lineaRuta) map.removeLayer(lineaRuta);
-            // Línea azul más gruesa para que resalte
-            lineaRuta = L.polyline(latlngs, {color: '#007bff', weight: 5, opacity: 0.8}).addTo(map);
-            map.fitBounds(lineaRuta.getBounds(), {padding: [50, 50]}); // Enfocar la ruta con margen
-
-            // 4. Mostrar el itinerario final textual en la barra lateral
-            let html = "<b>🗓️ Tu Itinerario Cultural:</b><br><br>";
-            rutaEventos.forEach((e, i) => {
-                html += `
-                    <div style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px dotted #ccc;">
-                        <b>${i+1}. [${e.hora}]</b> ${e.nombre}<br>
-                        <small>📍 ${e.lugar}</small>
-                    </div>`;
-            });
-            const resultadoDiv = document.getElementById('lista-ruta-resultado');
-            resultadoDiv.innerHTML = html;
-            resultadoDiv.style.display = 'block';
-            // Hacer scroll automático hacia el resultado
-            resultadoDiv.scrollIntoView({ behavior: 'smooth' });
-        }
-    </script>
-</body>
-</html>
+            // Dibujar línea
+            let latlngs = rutaEventos.map(e =>
