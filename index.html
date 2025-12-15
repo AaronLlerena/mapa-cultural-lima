@@ -3,38 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prueba de Mapa</title>
+    <title>Mapa Cultural de Lima</title>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
     <style>
-        body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100%; background-color: #e0e0e0; }
-        .aviso {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            font-family: sans-serif; font-size: 20px; color: #333; z-index: 0;
+        body { margin: 0; padding: 0; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; z-index: 1; }
+
+        /* Panel Flotante */
+        .panel {
+            position: absolute; top: 10px; right: 10px; 
+            z-index: 1000; background: white; padding: 15px; 
+            border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
+            width: 250px; max-height: 90vh; overflow-y: auto;
         }
+        button {
+            width: 100%; padding: 10px; margin-bottom: 5px; cursor: pointer;
+            background: #f0f0f0; border: none; border-radius: 4px; text-align: left;
+        }
+        button:hover { background: #e0e0e0; }
+        .btn-ruta { background: #4CAF50; color: white; font-weight: bold; margin-top: 10px; text-align: center; }
+        .info-ruta { margin-top: 15px; font-size: 0.9em; border-top: 1px solid #ccc; padding-top: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="aviso">Cargando mapa...</div>
+    <div class="panel">
+        <h3>🎭 Filtros</h3>
+        <button onclick="filtrar('Todos')">👁️ Ver Todo</button>
+        <button onclick="filtrar('Teatro')">🎭 Teatro</button>
+        <button onclick="filtrar('Música')">🎵 Música</button>
+        <button onclick="filtrar('Arte')">🖼️ Arte / Expo</button>
+        <hr>
+        <button class="btn-ruta" onclick="crearRuta()">🚀 Crear Ruta por Hora</button>
+        <div id="lista-ruta" class="info-ruta"></div>
+    </div>
+
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+
     <script>
-        // Si ves el mapa, significa que Leaflet funciona bien.
-        try {
-            var map = L.map('map').setView([-12.046, -77.042], 12);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap'
-            }).addTo(map);
+        // ==========================================
+        // TUS CLAVES REALES (Ya configuradas)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCxwRwF97SheBpKd0bfZ6Gcw8XQH2QwNbc",
+            authDomain: "mapacultural-lima.firebaseapp.com",
+            projectId: "mapacultural-lima",
+            storageBucket: "mapacultural-lima.firebasestorage.app",
+            messagingSenderId: "170254428690",
+            appId: "1:170254428690:web:0b7dbd02636b6af29446cb"
+        };
+
+        // 1. Iniciar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // 2. Iniciar Mapa
+        const map = L.map('map').setView([-12.046, -77.042], 12); // Lima
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        let eventos = [];
+        let marcadores = [];
+        let lineaRuta = null;
+
+        // 3. Descargar eventos
+        db.collection("eventos").get().then((snapshot) => {
+            snapshot.forEach((doc) => {
+                eventos.push(doc.data());
+            });
+            mostrarMapa(eventos);
+        });
+
+        // 4. Mostrar puntos
+        function mostrarMapa(lista) {
+            marcadores.forEach(m => map.removeLayer(m));
+            if(lineaRuta) map.removeLayer(lineaRuta);
+            marcadores = [];
+            document.getElementById('lista-ruta').innerHTML = "";
+
+            lista.forEach(ev => {
+                // Validación para evitar errores si lat/lon no son números
+                let lat = parseFloat(ev.lat);
+                let lon = parseFloat(ev.lon);
+                if(!isNaN(lat) && !isNaN(lon)) {
+                    let marker = L.marker([lat, lon])
+                        .bindPopup(`<b>${ev.nombre}</b><br>🕒 ${ev.hora}<br>📍 ${ev.lugar}`)
+                        .addTo(map);
+                    marcadores.push(marker);
+                }
+            });
+        }
+
+        // 5. Filtros
+        function filtrar(tipo) {
+            if(tipo === 'Todos') mostrarMapa(eventos);
+            else mostrarMapa(eventos.filter(e => e.tipo === tipo));
+        }
+
+        // 6. Tu Algoritmo de Ruta
+        function crearRuta() {
+            let ruta = [...eventos].sort((a, b) => a.hora.localeCompare(b.hora));
             
-            // Un marcador de prueba
-            L.marker([-12.046, -77.042]).addTo(map)
-                .bindPopup('¡El mapa funciona! <br> El problema era la llave de Firebase.')
-                .openPopup();
-                
-        } catch (error) {
-            alert("Error al cargar el mapa: " + error.message);
+            let latlngs = [];
+            ruta.forEach(e => {
+                let lat = parseFloat(e.lat);
+                let lon = parseFloat(e.lon);
+                if(!isNaN(lat) && !isNaN(lon)) latlngs.push([lat, lon]);
+            });
+
+            if(lineaRuta) map.removeLayer(lineaRuta);
+            if(latlngs.length > 0) {
+                lineaRuta = L.polyline(latlngs, {color: 'blue', weight: 4, dashArray: '10,5'}).addTo(map);
+                map.fitBounds(lineaRuta.getBounds());
+            }
+
+            let html = "<b>🗓️ Itinerario:</b><br>";
+            ruta.forEach((e, i) => {
+                html += `<div style="margin-bottom:5px;">${i+1}. <b>${e.hora}</b> ${e.nombre}</div>`;
+            });
+            document.getElementById('lista-ruta').innerHTML = html;
         }
     </script>
 </body>
