@@ -98,6 +98,7 @@
             <select id="select-dias" class="filtro-dia" onchange="cambiarFiltroDia()">
                 <option value="Todos">Cargando días...</option>
             </select>
+            <div id="last-update" style="font-size:12px; color:#555; margin-top:8px;">Actualizando...</div>
 
             <div class="titulo-seccion">🎭 ¿Qué te provoca?</div>
             <div id="botones-categorias">
@@ -163,6 +164,25 @@
             let filtroCategoriaActual = 'Todos';
 
             console.log("Descargando eventos...");
+
+            function mostrarUltimaActualizacion(timestamp) {
+                const el = document.getElementById('last-update');
+                if (!timestamp) {
+                    el.innerText = 'Última actualización: (sin registro)';
+                    return;
+                }
+                const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+                el.innerText = `Última actualización: ${d.toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' })}`;
+            }
+
+            db.collection("meta").doc("lastUpdate").get().then(doc => {
+                if (doc.exists) {
+                    mostrarUltimaActualizacion(doc.data().updatedAt);
+                } else {
+                    mostrarUltimaActualizacion(null);
+                }
+            }).catch(() => mostrarUltimaActualizacion(null));
+
             db.collection("eventos").get().then((snapshot) => {
                 if (snapshot.empty) {
                     document.getElementById('lista-lateral').innerHTML = "<p>Base de datos vacía. Corre el scraper de Python.</p>";
@@ -178,11 +198,43 @@
             }).catch(e => alert("Error DB: " + e.message));
 
             // FUNCIONES UI
+            function normalizeDia(dia) {
+                if (!dia) return '';
+                // Normaliza espacios y capitalización, pero conserva el número de día si existe.
+                return dia.toString().trim().replace(/\s+/g, ' ');
+            }
+
+            function parseDia(dia) {
+                // Devuelve {nombre: 'Lunes', numero: 9} si es posible.
+                const parts = normalizeDia(dia).split(' ');
+                const nombre = parts[0] || '';
+                const numero = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
+                return { nombre, numero };
+            }
+
             function llenarDropdownDias() {
                 const select = document.getElementById('select-dias');
                 const diasUnicos = new Set();
-                todosLosEventos.forEach(ev => { if(ev.dia) diasUnicos.add(ev.dia); });
-                const listaDias = Array.from(diasUnicos).sort();
+                todosLosEventos.forEach(ev => {
+                    if (ev.dia) diasUnicos.add(normalizeDia(ev.dia));
+                });
+
+                const ordenSemana = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+                const listaDias = Array.from(diasUnicos).sort((a, b) => {
+                    const da = parseDia(a);
+                    const db = parseDia(b);
+                    const ia = ordenSemana.indexOf(da.nombre);
+                    const ib = ordenSemana.indexOf(db.nombre);
+                    if (ia !== -1 && ib !== -1 && ia !== ib) return ia - ib;
+                    if (ia !== -1 && ib === -1) return -1;
+                    if (ib !== -1 && ia === -1) return 1;
+                    // Si es el mismo día de la semana y ambos tienen número, ordenamos por número.
+                    if (da.nombre === db.nombre && !isNaN(da.numero) && !isNaN(db.numero)) {
+                        return da.numero - db.numero;
+                    }
+                    return a.localeCompare(b, 'es');
+                });
+
                 select.innerHTML = '<option value="Todos">📅 Todos los Días</option>';
                 listaDias.forEach(dia => {
                     let opt = document.createElement("option"); opt.value = dia; opt.text = dia; select.appendChild(opt);
@@ -203,7 +255,7 @@
 
             function aplicarFiltrosCombinados() {
                 eventosActuales = todosLosEventos.filter(ev => {
-                    const diaOk = (filtroDiaActual === 'Todos') || (ev.dia === filtroDiaActual);
+                    const diaOk = (filtroDiaActual === 'Todos') || (normalizeDia(ev.dia) === filtroDiaActual);
                     const catOk = (filtroCategoriaActual === 'Todos') || (ev.tipo === filtroCategoriaActual);
                     return diaOk && catOk;
                 });

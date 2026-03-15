@@ -1,0 +1,7 @@
+# Ignorar credenciales sensibles
+serviceAccountKey.json
+*adminsdk*.json
+
+# Ignorar caches y archivos temporales
+__pycache__/
+*.pyc
