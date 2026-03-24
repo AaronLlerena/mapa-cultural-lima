@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Mapa Cultural de Lima</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -48,7 +51,8 @@
         }
         .evento-card:hover { border-color: #007bff; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         
-        .evento-card h4 { margin: 0 0 5px 0; font-size: 14px; color: #222; line-height: 1.3; }
+        .evento-card h4 { margin: 0 0 5px 0; font-size: 14px; color: #222; line-height: 1.3;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         
         /* Nueva sección de META DATOS (Lugar y Dirección) */
         .evento-card .meta-lugar { 
@@ -62,8 +66,10 @@
             font-size: 11px; color: #333; font-weight: bold; margin-bottom: 6px;
         }
 
-        .evento-card .descripcion-completa { font-size: 12px; color: #444; margin-bottom: 5px; line-height: 1.4; text-align: left; }
-        
+        /* Oculta cualquier resto de descripción que pueda generarse por caché/vieja versión */
+        .descripcion-completa { display: none !important; }
+
+                
         .btn-agendar {
             position: absolute; top: 10px; right: 10px;
             padding: 4px 10px; font-size: 11px; border: 1px solid #007bff;
@@ -82,6 +88,61 @@
 
         .info-ruta { margin-top: 15px; font-size: 12px; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6; }
 
+        /* PANEL DE AGENDA */
+        .agenda-panel {
+            position: absolute;
+            top: 90px;
+            right: 20px;
+            width: 260px;
+            max-height: 75vh;
+            background: rgba(255,255,255,0.95);
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            box-shadow: 0 12px 25px rgba(0,0,0,0.15);
+            padding: 12px;
+            overflow-y: auto;
+            z-index: 2000;
+            display: none;
+        }
+        .agenda-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .agenda-panel-header h4 { margin: 0; font-size: 13px; }
+        .agenda-item {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; margin-bottom: 8px; padding: 8px; border-radius: 8px;
+            background: #f7f9fb;
+        }
+        .agenda-title { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+        .agenda-meta { font-size: 11px; color: #555; }
+        .agenda-btn { background: #007bff; color: white; border: none; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 11px; }
+        .agenda-btn:hover { background: #0056b3; }
+
+        /* PANEL AGENDA (emergente) */
+        .agenda-panel {
+            position: fixed;
+            top: 90px;
+            right: 20px;
+            width: 320px;
+            max-height: calc(100vh - 120px);
+            overflow: auto;
+            background: rgba(255,255,255,0.96);
+            border: 1px solid rgba(0,0,0,0.15);
+            border-radius: 10px;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+            padding: 10px 12px;
+            z-index: 2000;
+            display: none;
+        }
+        .agenda-panel h4 { margin: 0 0 8px 0; font-size: 14px; }
+        .agenda-item {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            border-bottom: 1px solid rgba(0,0,0,0.08); padding: 6px 0;
+        }
+        .agenda-item:last-child { border-bottom: none; }
+        .agenda-item button { background: transparent; border: none; color: #dc3545; cursor: pointer; font-size: 14px; }
+        .agenda-item button:hover { text-decoration: underline; }
+        .agenda-item .agenda-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+        .agenda-item .agenda-meta { font-size: 11px; color: #555; }
+
         /* ICONOS MAPA */
         .icono-numero {
             background-color: #007bff; color: white; border-radius: 50%; text-align: center;
@@ -92,9 +153,14 @@
 </head>
 <body>
 
-    <div class="main-container">
+    <div id="build-banner" style="position:fixed; top:0; left:0; right:0; background:#000; color:#fff; font-size:12px; padding:4px 8px; z-index:9999; text-align:center;">
+        UI build: <span id="build-badge">(cargando...)</span>
+    </div>
+
+    <div class="main-container" style="margin-top: 26px;">
         <div class="sidebar">
             <div class="titulo-seccion">📅 ¿Cuándo quieres salir?</div>
+            <div style="font-size:11px; color:#666; margin-top:4px;">UI v=20260316-1 (cache bust enabled)</div>
             <select id="select-dias" class="filtro-dia" onchange="cambiarFiltroDia()">
                 <option value="Todos">Cargando días...</option>
             </select>
@@ -112,7 +178,10 @@
             <hr style="width: 100%; border-color: #eee; margin: 10px 0;">
 
             <div class="controles-resultados">
-                <div class="titulo-seccion" style="margin:0">Eventos (<span id="contador-eventos">0</span>)</div>
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                    <div class="titulo-seccion" style="margin:0">Eventos (<span id="contador-eventos">0</span>)</div>
+                    <div style="font-size:11px; color:#555;">Versión UI: sin descripción extra (usando solo nombre)</div>
+                </div>
                 <button class="btn-ordenar" onclick="ordenarResultadosPorHora()">🕒 Ordenar por Hora</button>
             </div>
 
@@ -125,7 +194,17 @@
             <div id="lista-ruta-resultado" class="info-ruta" style="display: none;"></div>
         </div>
 
+        <div id="agenda-panel" class="agenda-panel">
+            <div class="agenda-panel-header">
+                <h4>Tu agenda</h4>
+                <button class="agenda-btn" onclick="toggleAgendaPanel()">✕</button>
+            </div>
+            <div id="agenda-list"></div>
+            <button id="btn-ruta-agenda" class="btn-ruta-final" onclick="crearRutaConSeleccionados()">🚀 Crear ruta</button>
+        </div>
+
         <div id="map"></div>
+
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -134,6 +213,16 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
     <script>
+        // Asegura que cualquier resto de "descripcion-completa" sea eliminado aunque venga de caché / versión antigua.
+        const eliminarDescripcionCompleta = () => {
+            document.querySelectorAll('.descripcion-completa').forEach(el => el.remove());
+        };
+        eliminarDescripcionCompleta();
+        const observer = new MutationObserver(() => eliminarDescripcionCompleta());
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+
+        console.log('Mapa Cultural UI v=20260316-1');
+
         try {
             // CLAVES DE FIREBASE (NO CAMBIAR)
             const firebaseConfig = {
@@ -162,6 +251,9 @@
             let marcadoresRuta = []; 
             let filtroDiaActual = 'Todos';
             let filtroCategoriaActual = 'Todos';
+            let ordenarPorHoraActivo = false;
+
+            const ordenSemana = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 
             console.log("Descargando eventos...");
 
@@ -212,6 +304,28 @@
                 return { nombre, numero };
             }
 
+            function compareDias(a, b) {
+                const da = parseDia(a.dia);
+                const db = parseDia(b.dia);
+                const ia = ordenSemana.indexOf(da.nombre);
+                const ib = ordenSemana.indexOf(db.nombre);
+                if (ia !== -1 && ib !== -1 && ia !== ib) return ia - ib;
+                if (ia !== -1 && ib === -1) return -1;
+                if (ib !== -1 && ia === -1) return 1;
+                if (da.nombre === db.nombre && !isNaN(da.numero) && !isNaN(db.numero)) {
+                    return da.numero - db.numero;
+                }
+                return (a.dia || '').localeCompare(b.dia || '', 'es');
+            }
+
+            function ordenarEventosPorDiaHora(lista) {
+                return lista.sort((a, b) => {
+                    const cmpDia = compareDias(a, b);
+                    if (cmpDia !== 0) return cmpDia;
+                    return parseHora(a.hora) - parseHora(b.hora);
+                });
+            }
+
             function llenarDropdownDias() {
                 const select = document.getElementById('select-dias');
                 const diasUnicos = new Set();
@@ -259,11 +373,35 @@
                     const catOk = (filtroCategoriaActual === 'Todos') || (ev.tipo === filtroCategoriaActual);
                     return diaOk && catOk;
                 });
+
+                if (ordenarPorHoraActivo) {
+                    ordenarEventosPorDiaHora(eventosActuales);
+                }
+
                 actualizarVista(eventosActuales);
             }
 
+            function parseHora(hora) {
+                if (!hora) return Number.MAX_SAFE_INTEGER;
+                let cleaned = hora.toString().trim().toLowerCase();
+                // Normalizar formatos comunes (a las 5:00pm, 7pm., 7:00 p.m., etc.)
+                cleaned = cleaned.replace(/a las\s*/g, '');
+                cleaned = cleaned.replace(/\./g, '');
+                const m = cleaned.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+                if (!m) return Number.MAX_SAFE_INTEGER;
+                let h = parseInt(m[1], 10);
+                let min = m[2] ? parseInt(m[2], 10) : 0;
+                const ampm = m[3] ? m[3].toLowerCase() : null;
+                if (ampm) {
+                    if (ampm === 'pm' && h < 12) h += 12;
+                    if (ampm === 'am' && h === 12) h = 0;
+                }
+                return h * 60 + min;
+            }
+
             function ordenarResultadosPorHora() {
-                eventosActuales.sort((a, b) => a.hora.localeCompare(b.hora));
+                ordenarPorHoraActivo = true;
+                ordenarEventosPorDiaHora(eventosActuales);
                 actualizarVista(eventosActuales);
             }
 
@@ -302,20 +440,23 @@
                     const btnText = agendado ? '✅ Agendado' : 'Agendar';
                     
                     // Lógica para mostrar dirección si existe
-                    const direccionMostrar = ev.direccion ? ev.direccion : ev.lugar;
-                    const nombreCompleto = ev.nombre_completo || ev.nombre;
+                    // Evita que saltos de línea en el texto hagan parecer que hay "descripción" separada.
+                    const nombre = (ev.nombre || '').replace(/\s+/g, ' ').trim();
 
-                    html += `
-                        <div class="evento-card" onclick="resaltarEnMapa('${ev.id}')">
-                            <button id="btn-${ev.id}" class="${btnClass}" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">${btnText}</button>
-                            <h4>${ev.nombre}</h4>
-                            <span class="meta-hora">🕒 ${ev.hora}</span>
-                            <div class="meta-lugar">📍 ${ev.lugar}</div>
-                            <span class="meta-direccion">${direccionMostrar}</span>
-                            <div class="descripcion-completa">${nombreCompleto}</div>
-                        </div>`;
+                    const descripcion = (ev.descripcion || ev.nombre || '').replace(/\s+/g, ' ').trim();
+
+html += `
+    <div class="evento-card" onclick="resaltarEnMapa('${ev.id}')">
+        <button id="btn-${ev.id}" class="${btnClass}" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">${btnText}</button>
+        <span class="meta-hora">🕒 ${ev.hora || 'Hora no especificada'}</span>
+        <div class="meta-lugar">📍 ${ev.lugar}</div>
+        ${ev.direccion ? `<span class="meta-direccion">${ev.direccion}</span>` : ''}
+        <p style="font-size:12px; color:#444; margin:6px 0 0 0; line-height:1.4;">${descripcion}</p>
+    </div>`;
                 });
                 document.getElementById('lista-lateral').innerHTML = html;
+                // Asegura que no quede ninguna descripción extra en el DOM.
+                document.querySelectorAll('.descripcion-completa').forEach(el => el.remove());
             }
 
             function resaltarEnMapa(id) {
@@ -324,6 +465,49 @@
                     map.flyTo(marker.getLatLng(), 16, { duration: 1.5 });
                     marker.openPopup();
                 }
+            }
+
+            function ordenarSeleccionadosPorHora(ids) {
+                const arr = Array.from(ids).map(id => todosLosEventos.find(ev => ev.id === id)).filter(Boolean);
+                return ordenarEventosPorDiaHora(arr);
+            }
+
+            function toggleAgendaPanel() {
+                const panel = document.getElementById('agenda-panel');
+                if (panel.style.display === 'block') {
+                    panel.style.display = 'none';
+                } else {
+                    panel.style.display = 'block';
+                }
+            }
+
+            function updateAgendaPanel() {
+                const panel = document.getElementById('agenda-panel');
+                const list = document.getElementById('agenda-list');
+                const seleccionados = ordenarSeleccionadosPorHora(seleccionadosIDs);
+
+                if (seleccionados.length === 0) {
+                    panel.style.display = 'none';
+                    return;
+                }
+
+                panel.style.display = 'block';
+                list.innerHTML = '';
+
+                seleccionados.forEach(ev => {
+                    const item = document.createElement('div');
+                    item.className = 'agenda-item';
+                    const titulo = ev.nombre || '';
+                    const tituloResumen = titulo.length > 60 ? titulo.slice(0, 60).trim() + '...' : titulo;
+
+                    item.innerHTML = `<div style="flex:1;">
+                        <div class="agenda-title">${ev.hora || '??:??'} • ${tituloResumen}</div>
+                        <div class="agenda-meta">${ev.lugar}${ev.direccion ? ' · ' + ev.direccion : ''}</div>
+                    </div>
+                    <button class="agenda-btn" onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">✕</button>`;
+                    item.addEventListener('click', () => resaltarEnMapa(ev.id));
+                    list.appendChild(item);
+                });
             }
 
             window.toggleAgendar = function(id) {
@@ -339,13 +523,13 @@
                 }
                 document.getElementById('lista-ruta-resultado').style.display = 'none';
                 limpiarRutaEnMapa();
+                updateAgendaPanel();
             }
 
             window.crearRutaConSeleccionados = function() {
-                let ruta = todosLosEventos.filter(ev => seleccionadosIDs.has(ev.id));
+                let ruta = ordenarSeleccionadosPorHora(seleccionadosIDs);
                 if (ruta.length < 2) { alert("Selecciona al menos 2 eventos."); return; }
                 
-                ruta.sort((a, b) => a.hora.localeCompare(b.hora));
                 limpiarRutaEnMapa();
                 for (let id in marcadores) map.removeLayer(marcadores[id]); // Ocultar pines azules
 
@@ -389,9 +573,11 @@
                 // MOSTRAR ITINERARIO
                 let html = "<b>🗓️ Tu Ruta Cultural:</b><br>";
                 ruta.forEach((e, i) => {
+                    const titulo = e.nombre || '';
+                    const tituloResumen = titulo.length > 40 ? titulo.slice(0, 40).trim() + '...' : titulo;
                     html += `<div style="margin-bottom:8px; border-bottom:1px dotted #ccc; padding-bottom:5px;">
                         <span style="background:${i===0?'#28a745':'#007bff'}; color:white; border-radius:50%; padding:2px 7px; font-size:11px; font-weight:bold;">${i+1}</span>
-                        <b>${e.hora}</b> - ${e.nombre.substring(0,30)}...<br>
+                        <b>${e.hora}</b> - ${tituloResumen}<br>
                         <small style="color:#666; margin-left:25px; display:block;">📍 ${e.lugar}</small>
                     </div>`;
                 });
@@ -399,6 +585,12 @@
                 r.innerHTML = html; r.style.display = 'block'; r.scrollIntoView({behavior:'smooth'});
             }
         } catch (e) { alert("Error crítico: " + e.message); }
+
+        // Seguridad: eliminar cualquier resto de "descripcion-completa" si queda por caching o por otras razones.
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.descripcion-completa').forEach(el => el.remove());
+            console.log('UI: eliminadas descripciones (si existían)');
+        });
     </script>
 </body>
 </html>
