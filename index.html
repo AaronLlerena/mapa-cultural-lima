@@ -45,24 +45,26 @@
         /* TARJETAS */
         .lista-container { margin-top: 5px; }
         .evento-card {
-            background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 12px; 
+            background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 12px;
             margin-bottom: 10px; cursor: pointer; transition: all 0.2s; position: relative;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
         .evento-card:hover { border-color: #007bff; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
 
+        /* Orden visual: Hora → Lugar → Dirección → Descripción */
         .evento-card .meta-hora {
-            display: inline-block; background: #e9ecef; padding: 2px 6px; border-radius: 4px; 
+            display: inline-block; background: #e9ecef; padding: 2px 6px; border-radius: 4px;
             font-size: 11px; color: #333; font-weight: bold; margin-bottom: 6px;
         }
-        .evento-card .meta-lugar { 
-            font-size: 12px; color: #007bff; font-weight: 700; margin-bottom: 2px; 
+        .evento-card .meta-lugar {
+            font-size: 12px; color: #007bff; font-weight: 700; margin-bottom: 2px;
         }
-        .evento-card .meta-direccion { 
+        .evento-card .meta-direccion {
             font-size: 11px; color: #666; font-style: italic; margin-bottom: 6px; display: block;
         }
         .evento-card .meta-descripcion {
-            font-size: 12px; color: #444; margin: 6px 0 0 0; line-height: 1.4;
+            font-size: 12px; color: #444; margin: 6px 0 0 0; line-height: 1.5;
+            border-top: 1px solid #f0f0f0; padding-top: 6px;
         }
 
         .btn-agendar {
@@ -74,7 +76,7 @@
         .btn-agendar:hover { background: #f0f8ff; }
         .btn-agendar.agendado { background: #007bff; color: white; border-color: #0056b3; }
 
-        .btn-ruta-final { 
+        .btn-ruta-final {
             background: #28a745; color: white; font-weight: bold; font-size: 14px;
             text-align: center; border: none; padding: 12px; margin-top: 5px; cursor: pointer; width: 100%; border-radius: 6px;
             box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3); transition: background 0.2s;
@@ -85,19 +87,11 @@
 
         /* PANEL DE AGENDA */
         .agenda-panel {
-            position: fixed;
-            top: 90px;
-            right: 20px;
-            width: 320px;
-            max-height: calc(100vh - 120px);
-            overflow: auto;
-            background: rgba(255,255,255,0.96);
-            border: 1px solid rgba(0,0,0,0.15);
-            border-radius: 10px;
-            box-shadow: 0 12px 24px rgba(0,0,0,0.15);
-            padding: 10px 12px;
-            z-index: 2000;
-            display: none;
+            position: fixed; top: 90px; right: 20px; width: 320px;
+            max-height: calc(100vh - 120px); overflow: auto;
+            background: rgba(255,255,255,0.96); border: 1px solid rgba(0,0,0,0.15);
+            border-radius: 10px; box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+            padding: 10px 12px; z-index: 2000; display: none;
         }
         .agenda-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .agenda-panel-header h4 { margin: 0; font-size: 14px; }
@@ -123,13 +117,13 @@
 <body>
 
     <div id="build-banner" style="position:fixed; top:0; left:0; right:0; background:#000; color:#fff; font-size:12px; padding:4px 8px; z-index:9999; text-align:center;">
-        UI build: <span id="build-badge">(cargando...)</span>
+        UI build: <span id="build-badge">v=20260324-1</span>
     </div>
 
     <div class="main-container" style="margin-top: 26px;">
         <div class="sidebar">
             <div class="titulo-seccion">📅 ¿Cuándo quieres salir?</div>
-            <div style="font-size:11px; color:#666; margin-top:4px;">UI v=20260323-1</div>
+            <div style="font-size:11px; color:#666; margin-top:4px;">UI v=20260324-1</div>
             <select id="select-dias" class="filtro-dia" onchange="cambiarFiltroDia()">
                 <option value="Todos">Cargando días...</option>
             </select>
@@ -143,7 +137,7 @@
                 <button class="btn-filtro" onclick="cambiarFiltroCategoria('Cine', this)">🎬 Cine</button>
                 <button class="btn-filtro" onclick="cambiarFiltroCategoria('Arte/Expo', this)">🖼️ Arte / Expo</button>
             </div>
-            
+
             <hr style="width: 100%; border-color: #eee; margin: 10px 0;">
 
             <div class="controles-resultados">
@@ -160,6 +154,7 @@
             <div id="lista-ruta-resultado" class="info-ruta" style="display: none;"></div>
         </div>
 
+        <!-- PANEL AGENDA FLOTANTE -->
         <div id="agenda-panel" class="agenda-panel">
             <div class="agenda-panel-header">
                 <h4>Tu agenda</h4>
@@ -178,7 +173,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
     <script>
-        console.log('Mapa Cultural UI v=20260323-1');
+        console.log('Mapa Cultural UI v=20260324-1');
 
         try {
             const firebaseConfig = {
@@ -193,148 +188,146 @@
             firebase.initializeApp(firebaseConfig);
             const db = firebase.firestore();
 
+            // MAPA
             const map = L.map('map').setView([-12.046, -77.042], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
-            let todosLosEventos = [];
-            let eventosActuales = [];
+            // ESTADO
+            let todosLosEventos  = [];
+            let eventosActuales  = [];
             let seleccionadosIDs = new Set();
-            let marcadores = {};
-            let lineaRuta = null;
-            let flechasRuta = null;
-            let marcadoresRuta = [];
-            let filtroDiaActual = 'Todos';
-            let filtroCategoriaActual = 'Todos';
-            let ordenarPorHoraActivo = false;
+            let marcadores       = {};
+            let lineaRuta        = null;
+            let flechasRuta      = null;
+            let marcadoresRuta   = [];
+            let filtroDiaActual  = 'Todos';
+            let filtroCatActual  = 'Todos';
+            let ordenPorHora     = false;
 
             const ordenSemana = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 
-            function mostrarUltimaActualizacion(timestamp) {
+            // ── ÚLTIMA ACTUALIZACIÓN ─────────────────────────────────────
+            function mostrarUltimaActualizacion(ts) {
                 const el = document.getElementById('last-update');
-                if (!timestamp) { el.innerText = 'Última actualización: (sin registro)'; return; }
-                const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+                if (!ts) { el.innerText = 'Última actualización: (sin registro)'; return; }
+                const d = ts.toDate ? ts.toDate() : new Date(ts);
                 el.innerText = `Última actualización: ${d.toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' })}`;
             }
+            db.collection("meta").doc("lastUpdate").get()
+                .then(doc => mostrarUltimaActualizacion(doc.exists ? doc.data().updatedAt : null))
+                .catch(() => mostrarUltimaActualizacion(null));
 
-            db.collection("meta").doc("lastUpdate").get().then(doc => {
-                mostrarUltimaActualizacion(doc.exists ? doc.data().updatedAt : null);
-            }).catch(() => mostrarUltimaActualizacion(null));
-
-            db.collection("eventos").get().then((snapshot) => {
+            // ── CARGA DE DATOS ───────────────────────────────────────────
+            db.collection("eventos").get().then(snapshot => {
                 if (snapshot.empty) {
-                    document.getElementById('lista-lateral').innerHTML = "<p>Base de datos vacía. Corre el scraper de Python.</p>";
+                    document.getElementById('lista-lateral').innerHTML =
+                        "<p>Base de datos vacía. Corre el scraper de Python.</p>";
                     return;
                 }
-                snapshot.forEach((doc) => {
-                    let data = doc.data();
+                snapshot.forEach(doc => {
+                    const data = doc.data();
                     data.id = doc.id;
                     todosLosEventos.push(data);
                 });
                 llenarDropdownDias();
-                aplicarFiltrosCombinados();
+                aplicarFiltros();
             }).catch(e => alert("Error DB: " + e.message));
 
+            // ── UTILIDADES DE DÍAS ───────────────────────────────────────
             function normalizeDia(dia) {
                 return (dia || '').toString().trim().replace(/\s+/g, ' ');
             }
-
             function parseDia(dia) {
                 const parts = normalizeDia(dia).split(' ');
                 return { nombre: parts[0] || '', numero: parts.length > 1 ? parseInt(parts[1], 10) : NaN };
             }
-
             function compareDias(a, b) {
-                const da = parseDia(a.dia), db = parseDia(b.dia);
-                const ia = ordenSemana.indexOf(da.nombre), ib = ordenSemana.indexOf(db.nombre);
+                const da = parseDia(a.dia), db_ = parseDia(b.dia);
+                const ia = ordenSemana.indexOf(da.nombre), ib = ordenSemana.indexOf(db_.nombre);
                 if (ia !== -1 && ib !== -1 && ia !== ib) return ia - ib;
                 if (ia !== -1 && ib === -1) return -1;
                 if (ib !== -1 && ia === -1) return 1;
-                if (da.nombre === db.nombre && !isNaN(da.numero) && !isNaN(db.numero)) return da.numero - db.numero;
+                if (da.nombre === db_.nombre && !isNaN(da.numero) && !isNaN(db_.numero)) return da.numero - db_.numero;
                 return (a.dia || '').localeCompare(b.dia || '', 'es');
             }
-
             function parseHora(hora) {
                 if (!hora) return Number.MAX_SAFE_INTEGER;
                 let c = hora.toString().trim().toLowerCase().replace(/a las\s*/g, '').replace(/\./g, '');
                 const m = c.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
                 if (!m) return Number.MAX_SAFE_INTEGER;
                 let h = parseInt(m[1], 10), min = m[2] ? parseInt(m[2], 10) : 0;
-                const ampm = m[3] ? m[3].toLowerCase() : null;
-                if (ampm === 'pm' && h < 12) h += 12;
-                if (ampm === 'am' && h === 12) h = 0;
+                const ap = m[3] ? m[3].toLowerCase() : null;
+                if (ap === 'pm' && h < 12) h += 12;
+                if (ap === 'am' && h === 12) h = 0;
                 return h * 60 + min;
             }
-
-            function ordenarEventosPorDiaHora(lista) {
+            function sortByDiaHora(lista) {
                 return lista.sort((a, b) => {
-                    const cmpDia = compareDias(a, b);
-                    return cmpDia !== 0 ? cmpDia : parseHora(a.hora) - parseHora(b.hora);
+                    const cd = compareDias(a, b);
+                    return cd !== 0 ? cd : parseHora(a.hora) - parseHora(b.hora);
                 });
             }
 
+            // ── DROPDOWN DE DÍAS ─────────────────────────────────────────
             function llenarDropdownDias() {
                 const select = document.getElementById('select-dias');
-                const diasUnicos = new Set();
-                todosLosEventos.forEach(ev => { if (ev.dia) diasUnicos.add(normalizeDia(ev.dia)); });
-
-                const listaDias = Array.from(diasUnicos).sort((a, b) => {
-                    const da = parseDia(a), db = parseDia(b);
-                    const ia = ordenSemana.indexOf(da.nombre), ib = ordenSemana.indexOf(db.nombre);
+                const diasSet = new Set();
+                todosLosEventos.forEach(ev => { if (ev.dia) diasSet.add(normalizeDia(ev.dia)); });
+                const dias = Array.from(diasSet).sort((a, b) => {
+                    const da = parseDia(a), db_ = parseDia(b);
+                    const ia = ordenSemana.indexOf(da.nombre), ib = ordenSemana.indexOf(db_.nombre);
                     if (ia !== -1 && ib !== -1 && ia !== ib) return ia - ib;
                     if (ia !== -1 && ib === -1) return -1;
                     if (ib !== -1 && ia === -1) return 1;
-                    if (da.nombre === db.nombre && !isNaN(da.numero) && !isNaN(db.numero)) return da.numero - db.numero;
+                    if (da.nombre === db_.nombre && !isNaN(da.numero) && !isNaN(db_.numero)) return da.numero - db_.numero;
                     return a.localeCompare(b, 'es');
                 });
-
                 select.innerHTML = '<option value="Todos">📅 Todos los Días</option>';
-                listaDias.forEach(dia => {
-                    let opt = document.createElement("option");
-                    opt.value = dia; opt.text = dia;
+                dias.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d; opt.text = d;
                     select.appendChild(opt);
                 });
             }
 
+            // ── FILTROS ──────────────────────────────────────────────────
             function cambiarFiltroDia() {
                 filtroDiaActual = document.getElementById('select-dias').value;
-                aplicarFiltrosCombinados();
+                aplicarFiltros();
             }
-
-            function cambiarFiltroCategoria(categoria, boton) {
-                filtroCategoriaActual = categoria;
+            function cambiarFiltroCategoria(cat, btn) {
+                filtroCatActual = cat;
                 document.querySelectorAll('#botones-categorias .btn-filtro').forEach(b => b.classList.remove('activo'));
-                boton.classList.add('activo');
-                aplicarFiltrosCombinados();
+                btn.classList.add('activo');
+                aplicarFiltros();
             }
-
-            function aplicarFiltrosCombinados() {
+            function aplicarFiltros() {
                 eventosActuales = todosLosEventos.filter(ev => {
                     const diaOk = filtroDiaActual === 'Todos' || normalizeDia(ev.dia) === filtroDiaActual;
-                    const catOk = filtroCategoriaActual === 'Todos' || ev.tipo === filtroCategoriaActual;
+                    const catOk = filtroCatActual  === 'Todos' || ev.tipo === filtroCatActual;
                     return diaOk && catOk;
                 });
-                if (ordenarPorHoraActivo) ordenarEventosPorDiaHora(eventosActuales);
-                actualizarVista(eventosActuales);
+                if (ordenPorHora) sortByDiaHora(eventosActuales);
+                renderTarjetas(eventosActuales);
             }
-
             function ordenarResultadosPorHora() {
-                ordenarPorHoraActivo = true;
-                ordenarEventosPorDiaHora(eventosActuales);
-                actualizarVista(eventosActuales);
+                ordenPorHora = true;
+                sortByDiaHora(eventosActuales);
+                renderTarjetas(eventosActuales);
             }
 
-            function limpiarRutaEnMapa() {
-                if (lineaRuta) map.removeLayer(lineaRuta);
+            // ── MAPA ─────────────────────────────────────────────────────
+            function limpiarRuta() {
+                if (lineaRuta)   map.removeLayer(lineaRuta);
                 if (flechasRuta) map.removeLayer(flechasRuta);
                 marcadoresRuta.forEach(m => map.removeLayer(m));
                 marcadoresRuta = [];
             }
 
-            // ─────────────────────────────────────────────
-            // VISTA PRINCIPAL — TARJETAS (MODIFICADA)
-            // ─────────────────────────────────────────────
-            function actualizarVista(lista) {
-                limpiarRutaEnMapa();
+            // ── TARJETAS ─────────────────────────────────────────────────
+            // Orden: Hora → Lugar → Dirección → Descripción completa
+            function renderTarjetas(lista) {
+                limpiarRuta();
                 for (let id in marcadores) map.removeLayer(marcadores[id]);
                 marcadores = {};
 
@@ -342,16 +335,18 @@
 
                 if (lista.length === 0) {
                     document.getElementById('lista-lateral').innerHTML =
-                        "<p style='text-align:center; padding:10px; color:#777;'>Sin resultados.</p>";
+                        "<p style='text-align:center;padding:10px;color:#777;'>Sin resultados.</p>";
                     return;
                 }
 
-                let html = "";
+                let html = '';
                 lista.forEach(ev => {
                     const lat = parseFloat(ev.lat), lon = parseFloat(ev.lon);
                     if (isNaN(lat)) return;
 
-                    const marker = L.marker([lat, lon]).bindPopup(`<b>${ev.hora || 'Sin hora'}</b><br>${ev.lugar}`);
+                    // Pin en el mapa
+                    const marker = L.marker([lat, lon])
+                        .bindPopup(`<b>${ev.hora || 'Sin hora'}</b><br>${ev.lugar}`);
                     marker.addTo(map);
                     marcadores[ev.id] = marker;
 
@@ -359,10 +354,11 @@
                     const btnClass = agendado ? 'btn-agendar agendado' : 'btn-agendar';
                     const btnText  = agendado ? '✅ Agendado' : 'Agendar';
 
-                    // CAMBIO: Solo usamos descripción. Ignoramos 'nombre' para evitar redundancia.
-                    const descripcion = (ev.descripcion || '').replace(/\s+/g, ' ').trim();
-                    const hora        = ev.hora || 'Hora no especificada';
-                    const lugar       = ev.lugar || '';
+                    // descripcion: campo nuevo del scraper actualizado
+                    // fallback a nombre para datos anteriores al fix
+                    const descripcion = (ev.descripcion || ev.nombre || '').replace(/\s+/g, ' ').trim();
+                    const hora        = ev.hora      || 'Hora no especificada';
+                    const lugar       = ev.lugar     || '';
                     const direccion   = ev.direccion || '';
 
                     html += `
@@ -371,11 +367,10 @@
                                 onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">
                                 ${btnText}
                             </button>
-
                             <span class="meta-hora">🕒 ${hora}</span>
                             <div class="meta-lugar">📍 ${lugar}</div>
                             ${direccion ? `<span class="meta-direccion">${direccion}</span>` : ''}
-                            <p class="meta-descripcion">${descripcion}</p>
+                            ${descripcion ? `<p class="meta-descripcion">${descripcion}</p>` : ''}
                         </div>`;
                 });
 
@@ -383,44 +378,35 @@
             }
 
             function resaltarEnMapa(id) {
-                const marker = marcadores[id];
-                if (marker) {
-                    map.flyTo(marker.getLatLng(), 16, { duration: 1.5 });
-                    marker.openPopup();
-                }
+                const m = marcadores[id];
+                if (m) { map.flyTo(m.getLatLng(), 16, { duration: 1.5 }); m.openPopup(); }
             }
 
-            function ordenarSeleccionadosPorHora(ids) {
-                const arr = Array.from(ids).map(id => todosLosEventos.find(ev => ev.id === id)).filter(Boolean);
-                return ordenarEventosPorDiaHora(arr);
+            // ── AGENDA ───────────────────────────────────────────────────
+            function sortSelected(ids) {
+                return sortByDiaHora(
+                    Array.from(ids).map(id => todosLosEventos.find(ev => ev.id === id)).filter(Boolean)
+                );
             }
-
             function toggleAgendaPanel() {
-                const panel = document.getElementById('agenda-panel');
-                panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+                const p = document.getElementById('agenda-panel');
+                p.style.display = p.style.display === 'block' ? 'none' : 'block';
             }
-
             function updateAgendaPanel() {
                 const panel = document.getElementById('agenda-panel');
                 const list  = document.getElementById('agenda-list');
-                const seleccionados = ordenarSeleccionadosPorHora(seleccionadosIDs);
-
-                if (seleccionados.length === 0) { panel.style.display = 'none'; return; }
-
+                const sel   = sortSelected(seleccionadosIDs);
+                if (sel.length === 0) { panel.style.display = 'none'; return; }
                 panel.style.display = 'block';
                 list.innerHTML = '';
-
-                seleccionados.forEach(ev => {
+                sel.forEach(ev => {
                     const item = document.createElement('div');
                     item.className = 'agenda-item';
-                    
-                    // CAMBIO: Título de agenda basado en el inicio de la descripción
-                    const desc = (ev.descripcion || '');
-                    const tituloResumen = desc.length > 50 ? desc.slice(0, 50).trim() + '...' : desc;
-
+                    const desc = (ev.descripcion || ev.nombre || '');
+                    const resumen = desc.length > 55 ? desc.slice(0, 55).trim() + '…' : desc;
                     item.innerHTML = `
                         <div style="flex:1;">
-                            <div class="agenda-title">${ev.hora || '??:??'} · ${tituloResumen}</div>
+                            <div class="agenda-title">${ev.hora || '??:??'} · ${resumen}</div>
                             <div class="agenda-meta">${ev.lugar}${ev.direccion ? ' · ' + ev.direccion : ''}</div>
                         </div>
                         <button onclick="event.stopPropagation(); toggleAgendar('${ev.id}')">✕</button>`;
@@ -439,45 +425,41 @@
                     if (btn) { btn.classList.add('agendado'); btn.innerHTML = '✅ Agendado'; }
                 }
                 document.getElementById('lista-ruta-resultado').style.display = 'none';
-                limpiarRutaEnMapa();
+                limpiarRuta();
                 updateAgendaPanel();
-            }
+            };
 
+            // ── RUTA ─────────────────────────────────────────────────────
             window.crearRutaConSeleccionados = function() {
-                const ruta = ordenarSeleccionadosPorHora(seleccionadosIDs);
+                const ruta = sortSelected(seleccionadosIDs);
                 if (ruta.length < 2) { alert("Selecciona al menos 2 eventos."); return; }
 
-                limpiarRutaEnMapa();
+                limpiarRuta();
                 for (let id in marcadores) map.removeLayer(marcadores[id]);
 
                 const latlngs = [];
                 ruta.forEach((ev, i) => {
                     const lat = parseFloat(ev.lat), lon = parseFloat(ev.lon);
                     latlngs.push([lat, lon]);
-                    const cls  = i === 0 ? 'inicio' : '';
                     const icon = L.divIcon({
                         className: 'custom',
-                        html: `<div class='icono-numero ${cls}'>${i + 1}</div>`,
+                        html: `<div class='icono-numero ${i === 0 ? "inicio" : ""}'>${i + 1}</div>`,
                         iconSize: [25, 25], iconAnchor: [12, 12]
                     });
-                    const m = L.marker([lat, lon], { icon })
-                        .bindPopup(`<b>${i + 1}. ${ev.hora}</b><br>${ev.lugar}`)
-                        .addTo(map);
-                    marcadoresRuta.push(m);
+                    marcadoresRuta.push(
+                        L.marker([lat, lon], { icon })
+                            .bindPopup(`<b>${i + 1}. ${ev.hora}</b><br>${ev.lugar}`)
+                            .addTo(map)
+                    );
                 });
 
-                lineaRuta = L.polyline(latlngs, { color: '#007bff', weight: 4, opacity: 0.8, dashArray: '10, 10' }).addTo(map);
-
+                lineaRuta = L.polyline(latlngs, { color: '#007bff', weight: 4, opacity: 0.8, dashArray: '10,10' }).addTo(map);
                 flechasRuta = L.polylineDecorator(lineaRuta, {
                     patterns: [
-                        {
-                            offset: '10%', repeat: 0, endOffset: '25px',
-                            symbol: L.Symbol.arrowHead({ pixelSize: 15, polygon: false, pathOptions: { stroke: true, color: '#007bff', weight: 3 } })
-                        },
-                        {
-                            offset: '50%', repeat: '300px',
-                            symbol: L.Symbol.arrowHead({ pixelSize: 12, polygon: false, pathOptions: { stroke: true, color: '#007bff', weight: 2 } })
-                        }
+                        { offset: '10%', repeat: 0, endOffset: '25px',
+                          symbol: L.Symbol.arrowHead({ pixelSize: 15, polygon: false, pathOptions: { stroke: true, color: '#007bff', weight: 3 } }) },
+                        { offset: '50%', repeat: '300px',
+                          symbol: L.Symbol.arrowHead({ pixelSize: 12, polygon: false, pathOptions: { stroke: true, color: '#007bff', weight: 2 } }) }
                     ]
                 }).addTo(map);
 
@@ -485,21 +467,20 @@
 
                 let html = "<b>🗓️ Tu Ruta Cultural:</b><br>";
                 ruta.forEach((e, i) => {
-                    const desc = (e.descripcion || '');
-                    const resumen = desc.length > 40 ? desc.slice(0, 40).trim() + '...' : desc;
+                    const desc = (e.descripcion || e.nombre || '');
+                    const resumen = desc.length > 40 ? desc.slice(0, 40).trim() + '…' : desc;
                     html += `
-                        <div style="margin-bottom:8px; border-bottom:1px dotted #ccc; padding-bottom:5px;">
-                            <span style="background:${i === 0 ? '#28a745' : '#007bff'}; color:white; border-radius:50%; padding:2px 7px; font-size:11px; font-weight:bold;">${i + 1}</span>
-                            <b>${e.hora}</b> - ${resumen}<br>
-                            <small style="color:#666; margin-left:25px; display:block;">📍 ${e.lugar}</small>
+                        <div style="margin-bottom:8px;border-bottom:1px dotted #ccc;padding-bottom:5px;">
+                            <span style="background:${i === 0 ? '#28a745' : '#007bff'};color:white;border-radius:50%;padding:2px 7px;font-size:11px;font-weight:bold;">${i + 1}</span>
+                            <b>${e.hora}</b> — ${resumen}<br>
+                            <small style="color:#666;margin-left:25px;display:block;">📍 ${e.lugar}</small>
                         </div>`;
                 });
 
                 const r = document.getElementById('lista-ruta-resultado');
-                r.innerHTML = html;
-                r.style.display = 'block';
+                r.innerHTML = html; r.style.display = 'block';
                 r.scrollIntoView({ behavior: 'smooth' });
-            }
+            };
 
         } catch (e) { alert("Error crítico: " + e.message); }
     </script>
