@@ -14,7 +14,6 @@
         body, html { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; height: 100%; overflow: hidden; }
         .main-container { display: flex; height: 100vh; width: 100%; }
 
-        /* BARRA LATERAL */
         .sidebar {
             width: 340px; min-width: 280px; max-width: 50vw;
             background: #f8f9fa; padding: 10px; overflow-y: auto;
@@ -42,7 +41,6 @@
         .controles-resultados { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
         .btn-ordenar { background: #6c757d; color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; }
 
-        /* TARJETAS */
         .lista-container { margin-top: 5px; }
         .evento-card {
             background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 12px;
@@ -51,7 +49,6 @@
         }
         .evento-card:hover { border-color: #007bff; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
 
-        /* Orden visual: Hora → Lugar → Dirección → Descripción */
         .evento-card .meta-hora {
             display: inline-block; background: #e9ecef; padding: 2px 6px; border-radius: 4px;
             font-size: 11px; color: #333; font-weight: bold; margin-bottom: 6px;
@@ -85,7 +82,6 @@
 
         .info-ruta { margin-top: 15px; font-size: 12px; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #dee2e6; }
 
-        /* PANEL DE AGENDA */
         .agenda-panel {
             position: fixed; top: 90px; right: 20px; width: 320px;
             max-height: calc(100vh - 120px); overflow: auto;
@@ -106,7 +102,22 @@
         .agenda-item .agenda-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
         .agenda-item .agenda-meta { font-size: 11px; color: #555; }
 
-        /* ICONOS MAPA */
+        /* Popup del mapa — descripción más legible */
+        .leaflet-popup-content {
+            font-size: 12px;
+            line-height: 1.5;
+            max-width: 260px;
+        }
+        .popup-hora {
+            font-weight: bold; font-size: 13px; color: #007bff; margin-bottom: 4px;
+        }
+        .popup-lugar {
+            font-size: 11px; color: #555; margin-bottom: 6px; font-style: italic;
+        }
+        .popup-desc {
+            font-size: 12px; color: #333;
+        }
+
         .icono-numero {
             background-color: #007bff; color: white; border-radius: 50%; text-align: center;
             line-height: 24px; font-weight: bold; font-size: 12px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
@@ -117,13 +128,13 @@
 <body>
 
     <div id="build-banner" style="position:fixed; top:0; left:0; right:0; background:#000; color:#fff; font-size:12px; padding:4px 8px; z-index:9999; text-align:center;">
-        UI build: <span id="build-badge">v=20260324-1</span>
+        UI build: <span id="build-badge">v=20260324-2</span>
     </div>
 
     <div class="main-container" style="margin-top: 26px;">
         <div class="sidebar">
             <div class="titulo-seccion">📅 ¿Cuándo quieres salir?</div>
-            <div style="font-size:11px; color:#666; margin-top:4px;">UI v=20260324-1</div>
+            <div style="font-size:11px; color:#666; margin-top:4px;">UI v=20260324-2</div>
             <select id="select-dias" class="filtro-dia" onchange="cambiarFiltroDia()">
                 <option value="Todos">Cargando días...</option>
             </select>
@@ -154,7 +165,6 @@
             <div id="lista-ruta-resultado" class="info-ruta" style="display: none;"></div>
         </div>
 
-        <!-- PANEL AGENDA FLOTANTE -->
         <div id="agenda-panel" class="agenda-panel">
             <div class="agenda-panel-header">
                 <h4>Tu agenda</h4>
@@ -173,7 +183,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
 
     <script>
-        console.log('Mapa Cultural UI v=20260324-1');
+        console.log('Mapa Cultural UI v=20260324-2');
 
         try {
             const firebaseConfig = {
@@ -188,11 +198,9 @@
             firebase.initializeApp(firebaseConfig);
             const db = firebase.firestore();
 
-            // MAPA
             const map = L.map('map').setView([-12.046, -77.042], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
-            // ESTADO
             let todosLosEventos  = [];
             let eventosActuales  = [];
             let seleccionadosIDs = new Set();
@@ -324,8 +332,20 @@
                 marcadoresRuta = [];
             }
 
+            // Construye el HTML del popup: hora + lugar + descripción
+            function popupHTML(ev) {
+                const hora  = ev.hora || 'Sin hora';
+                const lugar = ev.lugar || '';
+                const desc  = (ev.descripcion || ev.nombre || '').replace(/\s+/g, ' ').trim();
+                // Trunca la descripción a 180 chars para que el popup no sea enorme
+                const descCorta = desc.length > 180 ? desc.slice(0, 180).trim() + '…' : desc;
+                return `
+                    <div class="popup-hora">🕒 ${hora}</div>
+                    <div class="popup-lugar">📍 ${lugar}</div>
+                    <div class="popup-desc">${descCorta}</div>`;
+            }
+
             // ── TARJETAS ─────────────────────────────────────────────────
-            // Orden: Hora → Lugar → Dirección → Descripción completa
             function renderTarjetas(lista) {
                 limpiarRuta();
                 for (let id in marcadores) map.removeLayer(marcadores[id]);
@@ -344,9 +364,9 @@
                     const lat = parseFloat(ev.lat), lon = parseFloat(ev.lon);
                     if (isNaN(lat)) return;
 
-                    // Pin en el mapa
+                    // ── PIN DEL MAPA — ahora muestra la descripción ───────
                     const marker = L.marker([lat, lon])
-                        .bindPopup(`<b>${ev.hora || 'Sin hora'}</b><br>${ev.lugar}`);
+                        .bindPopup(popupHTML(ev), { maxWidth: 280 });
                     marker.addTo(map);
                     marcadores[ev.id] = marker;
 
@@ -354,8 +374,6 @@
                     const btnClass = agendado ? 'btn-agendar agendado' : 'btn-agendar';
                     const btnText  = agendado ? '✅ Agendado' : 'Agendar';
 
-                    // descripcion: campo nuevo del scraper actualizado
-                    // fallback a nombre para datos anteriores al fix
                     const descripcion = (ev.descripcion || ev.nombre || '').replace(/\s+/g, ' ').trim();
                     const hora        = ev.hora      || 'Hora no especificada';
                     const lugar       = ev.lugar     || '';
@@ -448,7 +466,7 @@
                     });
                     marcadoresRuta.push(
                         L.marker([lat, lon], { icon })
-                            .bindPopup(`<b>${i + 1}. ${ev.hora}</b><br>${ev.lugar}`)
+                            .bindPopup(popupHTML(ev), { maxWidth: 280 })
                             .addTo(map)
                     );
                 });

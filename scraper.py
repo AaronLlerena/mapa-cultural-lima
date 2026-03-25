@@ -17,15 +17,13 @@ from geopy.geocoders import ArcGIS
 # ---------------------------------------------------------------------------
 
 HEPTAGRAMA_URL = "https://heptagrama.com/agenda-cultural-lima.htm"
-FIREBASE_SECRET_ENV = "FIREBASE_SERVICE_ACCOUNT"  # GitHub Secret con el JSON de la llave
+FIREBASE_SECRET_ENV = "FIREBASE_SERVICE_ACCOUNT"
 
 # ---------------------------------------------------------------------------
 # FIREBASE
 # ---------------------------------------------------------------------------
 
 def init_firestore_client():
-    """Inicia Firebase usando el secreto (o localmente un archivo json si existe)."""
-
     key_json = os.getenv(FIREBASE_SECRET_ENV)
     if key_json:
         try:
@@ -47,28 +45,85 @@ def init_firestore_client():
 
 
 # ---------------------------------------------------------------------------
-# GEOCODING (ArcGIS)
+# GEOCODING — con validación de bounding box Lima y fallbacks progresivos
 # ---------------------------------------------------------------------------
 
 geolocator = ArcGIS(timeout=10)
 
-
-def normalize_address_for_geocode(direccion: str, lugar: str) -> str:
-    """Construye una dirección más amigable para geocoders."""
-    if not direccion:
-        return f"{lugar}, Lima, Peru"
-    direccion_lim = direccion.replace(" - ", ", ")
-    return f"{direccion_lim}, {lugar}, Lima, Peru"
+# Bounding box de Lima Metropolitana (holgada para incluir todos los distritos)
+LIMA_LAT_MIN, LIMA_LAT_MAX = -12.30, -11.70
+LIMA_LON_MIN, LIMA_LON_MAX = -77.20, -76.70
 
 
-def obtener_coordenadas(direccion):
-    """Obtiene lat/lon usando ArcGIS."""
+def coords_en_lima(lat: float, lon: float) -> bool:
+    """Devuelve True solo si las coordenadas están dentro de Lima Metropolitana."""
+    return LIMA_LAT_MIN <= lat <= LIMA_LAT_MAX and LIMA_LON_MIN <= lon <= LIMA_LON_MAX
+
+
+def intentar_geocode(query: str):
+    """Geocodifica una query y retorna (lat, lon) solo si el punto cae en Lima."""
     try:
-        location = geolocator.geocode(direccion)
-        if location:
-            return location.latitude, location.longitude
+        loc = geolocator.geocode(query)
+        if loc:
+            if coords_en_lima(loc.latitude, loc.longitude):
+                return loc.latitude, loc.longitude
+            else:
+                print(f"   ⚠️  Fuera de Lima '{query}' → ({loc.latitude:.3f}, {loc.longitude:.3f}) descartado")
     except Exception as e:
-        print(f"   ⚠️ Error de mapa: {e}")
+        print(f"   ⚠️  Error geocode: {e}")
+    return None
+
+
+def simplificar_lugar(lugar: str) -> str:
+    """
+    Extrae la parte más reconocible de un nombre de recinto largo.
+
+    Ejemplos:
+      "Anfiteatro Nicomedes Santa Cruz del Parque de la Exposición"
+        → "Parque de la Exposición"
+      "Auditorio Julio Ramón Ribeyro del Centro Cultural Ricardo Palma"
+        → "Centro Cultural Ricardo Palma"
+    """
+    m = re.search(r"\b(?:del|de la|de los|de las)\s+(.+)$", lugar, flags=re.I)
+    if m:
+        candidato = m.group(1).strip()
+        if len(candidato.split()) >= 2:
+            return candidato
+    return lugar
+
+
+def obtener_coordenadas(lugar: str, direccion: str):
+    """
+    Intenta geocodificar usando múltiples estrategias en orden de especificidad.
+    Descarta cualquier resultado que no caiga dentro de Lima Metropolitana.
+
+    Orden de intentos:
+      1. dirección + lugar + "Lima Peru"   (máximo contexto)
+      2. solo dirección + "Lima Peru"
+      3. solo lugar + "Lima Peru"
+      4. lugar simplificado + "Lima Peru"  (quita prefijos de tipo de recinto)
+    """
+    dir_norm   = (direccion or "").replace(" - ", ", ").strip()
+    lugar_norm = (lugar or "").strip()
+
+    intentos = []
+    if dir_norm and lugar_norm:
+        intentos.append(f"{dir_norm}, {lugar_norm}, Lima, Peru")
+    if dir_norm:
+        intentos.append(f"{dir_norm}, Lima, Peru")
+    if lugar_norm:
+        intentos.append(f"{lugar_norm}, Lima, Peru")
+    simplif = simplificar_lugar(lugar_norm)
+    if simplif and simplif != lugar_norm:
+        intentos.append(f"{simplif}, Lima, Peru")
+
+    for query in intentos:
+        coords = intentar_geocode(query)
+        if coords:
+            print(f"   📍 OK con: '{query}'")
+            return coords
+        time.sleep(0.3)
+
     return None
 
 
@@ -98,21 +153,19 @@ def guess_tipo(text: str) -> str:
 def extract_hora(text: str) -> str:
     if not text:
         return ""
-    # Busca "a las 8:00pm", "8:00pm", "21:00", etc.
     m = re.search(r"(\d{1,2}:\d{2}\s*(?:am|pm)?)", text, flags=re.I)
     return m.group(1).strip() if m else ""
 
 
 def parse_agenda(html: str):
-    """Extrae eventos desde la agenda de Heptagrama.
+    """
+    Extrae eventos desde la agenda de Heptagrama.
 
-    Estructura HTML de Heptagrama:
+    Estructura HTML:
       <details>
         <summary>Lunes 23</summary>
-        <p>Nombre del Lugar (dirección - distrito)</p>   ← párrafo 1: lugar
-        <p>Descripción completa del evento...</p>         ← párrafo 2: descripción
-        <p>Otro lugar (...)</p>
-        <p>Otra descripción...</p>
+        <p>Nombre del Lugar (dirección - distrito)</p>
+        <p>Descripción completa del evento...</p>
         ...
       </details>
     """
@@ -134,8 +187,6 @@ def parse_agenda(html: str):
             pair.append(txt)
             if len(pair) == 2:
                 lugar_raw, desc_raw = pair
-
-                # Separa lugar y dirección: "Teatro de Lucía (calle Bellavista 512 - Miraflores)"
                 lugar = lugar_raw
                 direccion = ""
                 m = re.search(r"^(.*?)\s*\(([^)]+)\)\s*$", lugar_raw)
@@ -143,23 +194,18 @@ def parse_agenda(html: str):
                     lugar = m.group(1).strip()
                     direccion = m.group(2).strip()
 
-                # ── CAMBIO CLAVE ──────────────────────────────────────────
-                # 'descripcion' = texto completo del evento (para mostrar en la tarjeta)
-                # 'nombre'      = texto completo también (se usa como fallback y para el doc_id)
-                # ─────────────────────────────────────────────────────────
                 evento = {
                     "dia": dia,
                     "lugar": lugar,
                     "direccion": direccion,
-                    "descripcion": desc_raw,          # ← NUEVO: texto completo para el frontend
-                    "nombre": desc_raw,               # ← se mantiene para compatibilidad / doc_id
+                    "descripcion": desc_raw,
+                    "nombre": desc_raw,
                     "hora": extract_hora(desc_raw),
                     "tipo": guess_tipo(desc_raw),
                 }
                 eventos.append(evento)
                 pair = []
 
-        # Párrafo suelto (sin par de descripción)
         if pair:
             eventos.append({
                 "dia": dia,
@@ -181,15 +227,15 @@ def parse_agenda(html: str):
 def main():
     print("🔎 Descargando agenda desde Heptagrama...")
     res = requests.get(HEPTAGRAMA_URL, headers={
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/120 Safari/537.36",
     }, timeout=30)
-
     res.encoding = 'utf-8'
     html = res.text
 
     eventos = parse_agenda(html)
     if not eventos:
-        print("⚠️ No se encontraron eventos. Revisa que la página de Heptagrama sea accesible.")
+        print("⚠️ No se encontraron eventos.")
         return
 
     db = init_firestore_client()
@@ -210,20 +256,17 @@ def main():
 
     print(f"✅ Encontrados {len(eventos)} eventos. Subiendo a Firestore...")
     for evento in eventos:
-        doc_id = slugify(f"{evento.get('dia','')} {evento.get('lugar','')} {evento.get('hora','')} {evento.get('nombre','')}")
+        doc_id = slugify(
+            f"{evento.get('dia','')} {evento.get('lugar','')} "
+            f"{evento.get('hora','')} {evento.get('nombre','')}"
+        )
 
         if evento.get("direccion") or evento.get("lugar"):
-            direccion_full = normalize_address_for_geocode(evento.get("direccion", ""), evento.get("lugar", ""))
-            coords = obtener_coordenadas(direccion_full)
-            if not coords:
-                coords = obtener_coordenadas(f"{evento.get('lugar','')}, Lima, Peru")
-            if not coords and evento.get("direccion"):
-                coords = obtener_coordenadas(f"{evento.get('direccion')}, Lima, Peru")
-
+            coords = obtener_coordenadas(evento.get("lugar", ""), evento.get("direccion", ""))
             if coords:
                 evento["lat"], evento["lon"] = coords
             else:
-                print(f"   ⚠️ No pude geocodificar: {direccion_full}")
+                print(f"   ❌ Sin coordenadas válidas: {evento.get('lugar')} / {evento.get('direccion')}")
 
         db.collection("eventos").document(doc_id).set(evento)
         print(f"   ☁️  Guardado: {evento['dia']} - {evento['lugar']}")
@@ -233,7 +276,6 @@ def main():
         "updatedAt": firestore.SERVER_TIMESTAMP,
         "source": "Heptagrama"
     })
-
     print("\n✅ Actualización completa.")
 
 
