@@ -1,40 +1,32 @@
 #!/usr/bin/env python3
 """
 Scraper — Agenda Cultural de Lima (Heptagrama)
-===============================================
-Estructura confirmada del HTML:
 
+Estructura HTML confirmada:
   <article class="s">
     <details>
       <summary class="h2">Lunes 23</summary>
-      <p>                          ← bloque de lugar
-        "Nombre del Lugar"
-        <br>
-        "(dirección - distrito)"
-      </p>
-      <p>                          ← descripción del evento
-        "Texto completo..."
-      </p>
+
+      <p> Nombre Recinto <br> (dirección - distrito) </p>   ← p_lugar
+      <p> Descripción del evento... a las 8:00pm. </p>      ← p_desc
       <hr>
-      <p>Otro lugar<br>(direc.)</p>
-      <p>Otra descripción...</p>
+      <p> Otro Recinto <br> (dirección) </p>
+      <p> Otra descripción... </p>
       <hr>
-      ...
-    </details>
-    <details>
-      <summary class="h2">Martes 24</summary>
       ...
     </details>
     ...
-    <details>
-      <summary class="h2">EXPOSICIONES</summary>  ← ignorar desde aquí
+    <details>                     ← EXPOSICIONES → ignorar todo
+      <summary>Exposiciones</summary>
       ...
     </details>
   </article>
 
-Dentro de un <p> de descripción puede haber múltiples eventos con horas:
-  "8:00pm. Evento A...\n9:30pm. Evento B..."
-En ese caso se crean eventos separados.
+Reglas:
+- Dentro de cada <details>, los hijos son: <p>, <p>, <hr>, <p>, <p>, <hr>, ...
+- Siempre en pares (p_lugar, p_desc) separados por <hr>.
+- La hora SIEMPRE está en la descripción. Tomamos solo la PRIMERA hora.
+- El geocoding usa SOLO lugar + dirección del recinto (nunca descripción).
 """
 
 import json, os, re, time
@@ -66,19 +58,23 @@ geo = ArcGIS(timeout=10)
 def en_lima(lat, lon):
     return LIMA_LAT[0] <= lat <= LIMA_LAT[1] and LIMA_LON[0] <= lon <= LIMA_LON[1]
 
-def _geocode(q):
+def _geocode_raw(query):
+    """Geocodifica y retorna (lat,lon) solo si cae dentro de Lima."""
     try:
-        r = geo.geocode(q)
-        if r and en_lima(r.latitude, r.longitude):
-            return r.latitude, r.longitude
+        r = geo.geocode(query)
         if r:
-            print(f"   ⚠ Fuera de Lima: '{q}' → ({r.latitude:.3f},{r.longitude:.3f})")
+            if en_lima(r.latitude, r.longitude):
+                return r.latitude, r.longitude
+            print(f"   ⚠ Fuera de Lima '{query}' → ({r.latitude:.3f},{r.longitude:.3f})")
     except Exception as e:
-        print(f"   ⚠ Geocode error: {e}")
+        print(f"   ⚠ Error geocode: {e}")
     return None
 
-def simplificar(lugar):
-    """'Anfiteatro X del Parque de la Exposición' → 'Parque de la Exposición'"""
+def simplificar_lugar(lugar):
+    """
+    Extrae el nombre más reconocible de un recinto largo.
+    'Anfiteatro X del Parque de la Exposición' → 'Parque de la Exposición'
+    """
     m = re.search(r"\b(?:del|de la|de los|de las)\s+(.+)$", lugar, re.I)
     if m:
         c = m.group(1).strip()
@@ -87,20 +83,32 @@ def simplificar(lugar):
     return lugar
 
 def geocodificar(lugar, direccion):
+    """
+    Geocodifica usando SOLO el nombre del recinto y su dirección.
+    Prueba múltiples variantes en orden hasta encontrar un punto en Lima.
+    """
     dir_n = (direccion or "").replace(" - ", ", ").strip()
     lug_n = (lugar or "").strip()
+
     intentos = []
-    if dir_n and lug_n: intentos.append(f"{dir_n}, {lug_n}, Lima, Peru")
-    if dir_n:           intentos.append(f"{dir_n}, Lima, Peru")
-    if lug_n:           intentos.append(f"{lug_n}, Lima, Peru")
-    s = simplificar(lug_n)
-    if s != lug_n:      intentos.append(f"{s}, Lima, Peru")
+    if dir_n and lug_n:
+        intentos.append(f"{dir_n}, {lug_n}, Lima, Peru")
+    if dir_n:
+        intentos.append(f"{dir_n}, Lima, Peru")
+    if lug_n:
+        intentos.append(f"{lug_n}, Lima, Peru")
+    s = simplificar_lugar(lug_n)
+    if s != lug_n:
+        intentos.append(f"{s}, Lima, Peru")
+
     for q in intentos:
-        c = _geocode(q)
-        if c:
-            print(f"   📍 '{q}'")
-            return c
+        coords = _geocode_raw(q)
+        if coords:
+            print(f"   📍 OK: '{q}'")
+            return coords
         time.sleep(0.3)
+
+    print(f"   ❌ Sin coords: {lug_n} / {dir_n}")
     return None
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -110,30 +118,41 @@ def slugify(t):
 
 def guess_tipo(t):
     t = (t or "").lower()
-    if any(k in t for k in ["teatro","obra","función","funcion","dramaturgia","escena","monólogo"]): return "Teatro"
-    if any(k in t for k in ["música","musica","concierto","dj","band","orquesta","jazz","rock","crioll","blues","salsa"]): return "Música"
-    if any(k in t for k in ["expo","exposición","exposicion","muestra","arte","foto","pintura","galería","inaugurac"]): return "Arte/Expo"
-    if any(k in t for k in ["cine","películ","film","documental","cortometraje","kino"]): return "Cine"
+    if any(k in t for k in ["teatro","obra","función","funcion","dramaturgia","escena","monólogo","unipersonal"]):
+        return "Teatro"
+    if any(k in t for k in ["música","musica","concierto","dj","band","orquesta","jazz","rock","crioll","blues","salsa","cumbia"]):
+        return "Música"
+    if any(k in t for k in ["expo","exposición","exposicion","muestra","arte","foto","pintura","galería","inaugurac"]):
+        return "Arte/Expo"
+    if any(k in t for k in ["cine","películ","film","documental","cortometraje","kino"]):
+        return "Cine"
     return "Otro"
 
-# Captura horas: "9:00pm", "8:30am", "a las 8pm", "de 2:00pm"
-_RE_HORA = re.compile(r"(?:(?:a la[s]?|de)\s+)?(\d{1,2}:\d{2}\s*(?:am|pm))", re.I)
+# Regex de hora: captura "8:00pm", "8:00 pm", "8:00PM", "a las 8:00pm", "de 2:00pm"
+# Acepta con o sin espacio entre número y am/pm
+_RE_HORA = re.compile(
+    r"(?:a\s+las?\s+|de\s+)?(\d{1,2}:\d{2}\s*[aApP][mM])",
+    re.I
+)
 
 def primera_hora(texto):
+    """Retorna SOLO la primera hora encontrada en el texto."""
     m = _RE_HORA.search(texto or "")
-    return m.group(1).strip() if m else ""
+    if m:
+        # Normaliza: quita espacios internos ("8:00 pm" → "8:00pm")
+        return re.sub(r"\s+", "", m.group(1)).lower()
+    return ""
 
 def limpiar(t):
     return re.sub(r"\s+", " ", (t or "")).strip()
 
-# ── EXTRAER TEXTO DE UN <p> RESPETANDO <br> ───────────────────────────────────
-def p_a_lineas(p: Tag) -> list[str]:
+# ── EXTRAER TEXTO DE UN <p> CON <br> INTERNOS ────────────────────────────────
+def p_lineas(p: Tag) -> list[str]:
     """
-    Convierte un <p> con <br> internos en una lista de líneas limpias.
+    Convierte <p>Texto1<br>(Texto2)</p> en ['Texto1', '(Texto2)'].
     Ignora líneas vacías.
     """
-    lineas = []
-    buf = []
+    lineas, buf = [], []
     for node in p.children:
         if isinstance(node, NavigableString):
             buf.append(str(node))
@@ -146,71 +165,41 @@ def p_a_lineas(p: Tag) -> list[str]:
         lineas.append(limpiar("".join(buf)))
     return [l for l in lineas if l]
 
-# ── CREAR EVENTOS A PARTIR DE LUGAR + DESCRIPCIÓN ────────────────────────────
-def crear_eventos(dia, lugar, direccion, descripcion) -> list[dict]:
-    """
-    A partir de un bloque de descripción, crea uno o varios eventos.
-
-    Si la descripción tiene múltiples horas (ej: Jazz Zone con 2 funciones),
-    divide en sub-eventos por cada bloque "HH:MMam/pm. texto".
-
-    La hora del lugar (primer evento del bloque) se usa como hora_inicio
-    del recinto en caso de evento multi-función.
-    """
-    desc = limpiar(descripcion)
-    if not desc:
-        return []
-
-    # Detecta múltiples bloques iniciados con hora
-    # Ejemplo: "8:00pm. Stand Up...\n10:00pm. Música y Danza..."
-    multi = re.findall(
-        r"(\d{1,2}:\d{2}\s*(?:am|pm)\.?\s+.+?)(?=\d{1,2}:\d{2}\s*(?:am|pm)\.|$)",
-        desc, re.I | re.S
-    )
-    bloques = [limpiar(b) for b in multi if limpiar(b)] if len(multi) > 1 else [desc]
-
-    hora_fallback = primera_hora(desc)  # hora del primer evento del lugar
-
-    resultado = []
-    for bloque in bloques:
-        hora = primera_hora(bloque) or hora_fallback
-        resultado.append({
-            "dia":        dia,
-            "lugar":      lugar,
-            "direccion":  direccion,
-            "descripcion": bloque,
-            "nombre":     bloque,          # mantener para compatibilidad / doc_id
-            "hora":       hora,
-            "tipo":       guess_tipo(bloque),
-        })
-    return resultado
-
 # ── PARSER PRINCIPAL ──────────────────────────────────────────────────────────
 def parse_agenda(html: str) -> list[dict]:
     """
-    Recorre <article class="s"> → <details> → pares de <p> separados por <hr>.
-
-    Estructura dentro de cada <details>:
-      <summary class="h2">Lunes 23</summary>
-      <p> lugar <br> dirección </p>       ← p_lugar
-      <p> descripción del evento </p>     ← p_desc
-      <hr>
-      <p> lugar <br> dirección </p>
-      <p> descripción </p>
+    Recorre <article class="s"> → cada <details> es un día.
+    Dentro de cada <details>, los hijos directos son:
+      <summary>  → nombre del día
+      <p>        → lugar (con <br> y dirección)
+      <p>        → descripción
+      <hr>       → separador
+      <p>        → siguiente lugar
+      <p>        → siguiente descripción
       <hr>
       ...
+    Lógica: recoge todos los <p> hijos directos en orden,
+    los empareja de 2 en 2 (par, impar) como (lugar, descripción).
+    Los <hr> se ignoran — solo sirven visualmente.
     """
     soup = BeautifulSoup(html, "html.parser")
     eventos = []
 
-    # Contenedor principal
-    article = soup.find("article", class_="s") or soup.find("article") or soup.find("main") or soup.body
+    article = (soup.find("article", class_="s")
+               or soup.find("article")
+               or soup.find("main")
+               or soup.body)
+
     if not article:
-        print("❌ No se encontró el contenedor principal <article>.")
+        print("❌ No se encontró el contenedor <article>.")
         return []
 
-    RE_DIA = re.compile(r"(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[aá]bado|Domingo)", re.I)
+    RE_DIA = re.compile(
+        r"^(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[aá]bado|Domingo)\s*\d*$",
+        re.I
+    )
 
+    # Itera sobre los <details> hijos directos del article
     for details in article.find_all("details", recursive=False):
         summary = details.find("summary")
         if not summary:
@@ -218,86 +207,71 @@ def parse_agenda(html: str) -> list[dict]:
 
         dia_texto = limpiar(summary.get_text())
 
-        # Parar en EXPOSICIONES
+        # Ignorar EXPOSICIONES y cualquier sección que no sea día de semana
         if re.search(r"EXPOSICI", dia_texto, re.I):
-            print(f"   🛑 Sección EXPOSICIONES encontrada → deteniendo scrape.")
-            break
-
-        # Solo procesar si es un día de la semana
-        if not RE_DIA.search(dia_texto):
+            print(f"   🛑 Ignorando sección: '{dia_texto}'")
+            continue
+        if not RE_DIA.match(dia_texto):
+            print(f"   ⏭ Saltando sección desconocida: '{dia_texto}'")
             continue
 
-        print(f"\n📅 Procesando: {dia_texto}")
+        print(f"\n📅 {dia_texto}")
 
-        # Recoge los hijos directos del <details> (excepto el <summary>)
-        # Los agrupa en pares: (p_lugar, p_desc) separados por <hr>
-        hijos = [h for h in details.children
-                 if isinstance(h, Tag) and h.name != "summary"]
+        # Recoge TODOS los <p> hijos directos del <details> (ignora <hr> y otros)
+        parrafos = [h for h in details.children
+                    if isinstance(h, Tag) and h.name == "p"]
 
+        # Los empareja de 2 en 2: (p_lugar, p_desc)
         i = 0
-        while i < len(hijos):
-            hijo = hijos[i]
+        while i + 1 < len(parrafos):
+            p_lugar = parrafos[i]
+            p_desc  = parrafos[i + 1]
+            i += 2
 
-            # Saltar <hr>
-            if hijo.name == "hr":
-                i += 1
+            # ── Extrae lugar y dirección del primer <p> ───────────────────
+            lineas = p_lineas(p_lugar)
+            if not lineas:
                 continue
 
-            # Esperamos un <p> de lugar
-            if hijo.name != "p":
-                i += 1
-                continue
+            lugar_raw = lineas[0]
 
-            p_lugar = hijo
-            lineas_lugar = p_a_lineas(p_lugar)
-
-            if not lineas_lugar:
-                i += 1
-                continue
-
-            # Extrae lugar y dirección
-            lugar_raw  = lineas_lugar[0]
-            lugar      = re.sub(r"\s*\(.*?\)\s*$", "", lugar_raw).strip()
-            direccion  = ""
-
-            # La dirección puede estar en la misma línea entre paréntesis,
-            # o en la segunda línea entre paréntesis
-            m = re.search(r"\(([^)]+)\)", lugar_raw)
+            # Dirección: puede estar en la misma línea "Nombre (dir)" o en línea 2
+            m = re.search(r"^(.*?)\s*\(([^)]+)\)\s*$", lugar_raw)
             if m:
-                lugar     = lugar_raw[:m.start()].strip()
-                direccion = m.group(1).strip()
-            elif len(lineas_lugar) > 1 and lineas_lugar[1].startswith("("):
-                direccion = lineas_lugar[1].strip("() ")
-
-            # Busca el siguiente <p> de descripción (puede haber un <p> vacío entre medio)
-            p_desc = None
-            j = i + 1
-            while j < len(hijos):
-                if hijos[j].name == "hr":
-                    break
-                if hijos[j].name == "p":
-                    txt = limpiar(hijos[j].get_text())
-                    if txt:
-                        p_desc = hijos[j]
-                        j += 1
-                        break
-                j += 1
-
-            if p_desc:
-                descripcion = limpiar(p_desc.get_text(" "))
-                nuevos = crear_eventos(dia_texto, lugar, direccion, descripcion)
-                for ev in nuevos:
-                    print(f"   ✔ [{ev['hora'] or '??:??'}] {lugar}")
-                eventos.extend(nuevos)
-                i = j  # avanza al siguiente bloque
+                lugar     = m.group(1).strip()
+                direccion = m.group(2).strip()
+            elif len(lineas) > 1 and lineas[1].startswith("("):
+                lugar     = lugar_raw
+                direccion = lineas[1].strip("() ")
             else:
-                i += 1
+                lugar     = lugar_raw
+                direccion = ""
+
+            # ── Extrae descripción del segundo <p> ────────────────────────
+            descripcion = limpiar(p_desc.get_text(" "))
+            if not descripcion:
+                continue
+
+            # ── Hora: SIEMPRE la primera que aparezca en la descripción ───
+            hora = primera_hora(descripcion)
+
+            evento = {
+                "dia":         dia_texto,
+                "lugar":       lugar,
+                "direccion":   direccion,
+                "descripcion": descripcion,
+                "nombre":      descripcion,   # compatibilidad
+                "hora":        hora,
+                "tipo":        guess_tipo(descripcion),
+            }
+            eventos.append(evento)
+            print(f"   ✔ [{hora or '??:??'}] {lugar}")
 
     return eventos
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
-    print("🔎 Descargando agenda desde Heptagrama...")
+    print("🔎 Descargando agenda de Heptagrama...")
     res = requests.get(HEPTAGRAMA_URL, headers={
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
@@ -308,23 +282,21 @@ def main():
 
     if not eventos:
         print("\n❌ No se encontraron eventos.")
-        print("   Tip: guarda el HTML con:")
-        print("   curl -A 'Mozilla/5.0' -o pagina.html https://heptagrama.com/agenda-cultural-lima.htm")
-        print("   y compártelo para analizar la estructura exacta.")
         return
 
     from collections import Counter
-    print(f"\n✅ {len(eventos)} eventos encontrados:")
-    for d, n in sorted(Counter(e["dia"] for e in eventos).items()):
-        print(f"   {d}: {n} evento(s)")
+    print(f"\n✅ Total: {len(eventos)} eventos")
+    for dia, n in sorted(Counter(e["dia"] for e in eventos).items()):
+        print(f"   {dia}: {n} evento(s)")
 
+    # ── Firestore ─────────────────────────────────────────────────────────
     db = init_db()
 
-    print("\n🧹 Limpiando Firestore...")
+    print("\n🧹 Limpiando colección 'eventos'...")
     batch = db.batch()
     cnt = 0
-    for d in db.collection("eventos").stream():
-        batch.delete(d.reference)
+    for doc in db.collection("eventos").stream():
+        batch.delete(doc.reference)
         cnt += 1
         if cnt % 500 == 0:
             batch.commit(); batch = db.batch()
@@ -332,27 +304,26 @@ def main():
         batch.commit()
     print(f"   ✅ {cnt} documentos eliminados.")
 
-    print("\n☁️  Subiendo a Firestore...")
+    print("\n☁️  Subiendo eventos...")
     for ev in eventos:
-        doc_id = slugify(f"{ev['dia']} {ev['lugar']} {ev['hora']} {ev['nombre'][:60]}")
+        doc_id = slugify(
+            f"{ev['dia']} {ev['lugar']} {ev['hora']} {ev['nombre'][:60]}"
+        )
 
-        if ev.get("lugar") or ev.get("direccion"):
-            coords = geocodificar(ev["lugar"], ev["direccion"])
-            if coords:
-                ev["lat"], ev["lon"] = coords
-            else:
-                print(f"   ❌ Sin coords: {ev['lugar']} / {ev['direccion']}")
+        # Geocodifica usando SOLO lugar + dirección del recinto
+        coords = geocodificar(ev["lugar"], ev["direccion"])
+        if coords:
+            ev["lat"], ev["lon"] = coords
 
         db.collection("eventos").document(doc_id).set(ev)
-        print(f"   ☁ {ev['dia']} - {ev['lugar']} [{ev['hora'] or '??'}]")
+        print(f"   ☁ {ev['dia']} [{ev['hora'] or '??'}] {ev['lugar']}")
         time.sleep(1)
 
     db.collection("meta").document("lastUpdate").set({
         "updatedAt": firestore.SERVER_TIMESTAMP,
-        "source": "Heptagrama"
+        "source":    "Heptagrama"
     })
     print("\n✅ Actualización completa.")
-
 
 if __name__ == "__main__":
     main()
