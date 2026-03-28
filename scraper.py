@@ -1,7 +1,40 @@
 #!/usr/bin/env python3
 """
-Scraper de la Agenda Cultural de Lima (Heptagrama)
-Versión con diagnóstico automático de estructura HTML.
+Scraper — Agenda Cultural de Lima (Heptagrama)
+===============================================
+Estructura confirmada del HTML:
+
+  <article class="s">
+    <details>
+      <summary class="h2">Lunes 23</summary>
+      <p>                          ← bloque de lugar
+        "Nombre del Lugar"
+        <br>
+        "(dirección - distrito)"
+      </p>
+      <p>                          ← descripción del evento
+        "Texto completo..."
+      </p>
+      <hr>
+      <p>Otro lugar<br>(direc.)</p>
+      <p>Otra descripción...</p>
+      <hr>
+      ...
+    </details>
+    <details>
+      <summary class="h2">Martes 24</summary>
+      ...
+    </details>
+    ...
+    <details>
+      <summary class="h2">EXPOSICIONES</summary>  ← ignorar desde aquí
+      ...
+    </details>
+  </article>
+
+Dentro de un <p> de descripción puede haber múltiples eventos con horas:
+  "8:00pm. Evento A...\n9:30pm. Evento B..."
+En ese caso se crean eventos separados.
 """
 
 import json, os, re, time
@@ -14,7 +47,6 @@ from geopy.geocoders import ArcGIS
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 HEPTAGRAMA_URL  = "https://heptagrama.com/agenda-cultural-lima.htm"
 FIREBASE_SECRET = "FIREBASE_SERVICE_ACCOUNT"
-
 LIMA_LAT = (-12.30, -11.70)
 LIMA_LON = (-77.20, -76.70)
 
@@ -46,6 +78,7 @@ def _geocode(q):
     return None
 
 def simplificar(lugar):
+    """'Anfiteatro X del Parque de la Exposición' → 'Parque de la Exposición'"""
     m = re.search(r"\b(?:del|de la|de los|de las)\s+(.+)$", lugar, re.I)
     if m:
         c = m.group(1).strip()
@@ -77,13 +110,14 @@ def slugify(t):
 
 def guess_tipo(t):
     t = (t or "").lower()
-    if any(k in t for k in ["teatro","obra","función","funcion","dramaturgia","escena"]): return "Teatro"
-    if any(k in t for k in ["música","musica","concierto","dj","band","orquesta","jazz","rock","crioll","blues"]): return "Música"
-    if any(k in t for k in ["expo","exposición","exposicion","muestra","arte","foto","pintura","galería"]): return "Arte/Expo"
-    if any(k in t for k in ["cine","películ","film","documental","cortometraje"]): return "Cine"
+    if any(k in t for k in ["teatro","obra","función","funcion","dramaturgia","escena","monólogo"]): return "Teatro"
+    if any(k in t for k in ["música","musica","concierto","dj","band","orquesta","jazz","rock","crioll","blues","salsa"]): return "Música"
+    if any(k in t for k in ["expo","exposición","exposicion","muestra","arte","foto","pintura","galería","inaugurac"]): return "Arte/Expo"
+    if any(k in t for k in ["cine","películ","film","documental","cortometraje","kino"]): return "Cine"
     return "Otro"
 
-_RE_HORA = re.compile(r"(?:(?:a las|de)\s+)?(\d{1,2}:\d{2}\s*(?:am|pm))", re.I)
+# Captura horas: "9:00pm", "8:30am", "a las 8pm", "de 2:00pm"
+_RE_HORA = re.compile(r"(?:(?:a la[s]?|de)\s+)?(\d{1,2}:\d{2}\s*(?:am|pm))", re.I)
 
 def primera_hora(texto):
     m = _RE_HORA.search(texto or "")
@@ -92,290 +126,178 @@ def primera_hora(texto):
 def limpiar(t):
     return re.sub(r"\s+", " ", (t or "")).strip()
 
-# ── DIAGNÓSTICO ───────────────────────────────────────────────────────────────
-def diagnosticar(soup):
+# ── EXTRAER TEXTO DE UN <p> RESPETANDO <br> ───────────────────────────────────
+def p_a_lineas(p: Tag) -> list[str]:
     """
-    Imprime un resumen de la estructura HTML para entender cómo está hecha la página.
-    Útil si el parser falla.
+    Convierte un <p> con <br> internos en una lista de líneas limpias.
+    Ignora líneas vacías.
     """
-    print("\n═══ DIAGNÓSTICO DE ESTRUCTURA HTML ═══")
-    print("Tags de primer nivel dentro de <body> o contenedor principal:")
-    body = soup.find("body") or soup
-    # Muestra los primeros 40 hijos directos con contenido
-    count = 0
-    for ch in body.children:
-        if not isinstance(ch, Tag): continue
-        txt = limpiar(ch.get_text())[:70]
-        clases = ch.get("class", [])
-        print(f"  <{ch.name} class={clases}> → '{txt}'")
-        count += 1
-        if count >= 40: break
+    lineas = []
+    buf = []
+    for node in p.children:
+        if isinstance(node, NavigableString):
+            buf.append(str(node))
+        elif isinstance(node, Tag) and node.name == "br":
+            lineas.append(limpiar("".join(buf)))
+            buf = []
+        elif isinstance(node, Tag):
+            buf.append(node.get_text(" "))
+    if buf:
+        lineas.append(limpiar("".join(buf)))
+    return [l for l in lineas if l]
 
-    print("\n¿Hay <details>?", bool(soup.find("details")))
-    print("¿Hay <h2>?",      bool(soup.find("h2")))
-    print("¿Hay <h3>?",      bool(soup.find("h3")))
-    print("¿Hay <hr>?",      bool(soup.find("hr")))
-    print("¿Hay <section>?", bool(soup.find("section")))
-
-    # Busca el texto "Lunes" para ver en qué tag aparece
-    for tag in soup.find_all(True):
-        txt = tag.get_text()
-        if re.search(r"\bLunes\b", txt) and len(txt) < 30:
-            print(f"\nTag con 'Lunes': <{tag.name} class={tag.get('class',[])}> → '{limpiar(txt)}'")
-            break
-    print("═══════════════════════════════════════\n")
-
-# ── PARSERS ───────────────────────────────────────────────────────────────────
-
-def extraer_bloques_de_texto(texto_completo: str) -> list[dict]:
+# ── CREAR EVENTOS A PARTIR DE LUGAR + DESCRIPCIÓN ────────────────────────────
+def crear_eventos(dia, lugar, direccion, descripcion) -> list[dict]:
     """
-    Parser de texto plano como fallback.
-    Asume el formato que vemos en el markdown de la página:
+    A partir de un bloque de descripción, crea uno o varios eventos.
 
-      Lunes 23
-      ─────────────
-      Nombre del Lugar
-      (dirección - distrito)
+    Si la descripción tiene múltiples horas (ej: Jazz Zone con 2 funciones),
+    divide en sub-eventos por cada bloque "HH:MMam/pm. texto".
 
-      Descripción del evento...
-
-      ---
-
-      Otro lugar
-      ...
-
-      EXPOSICIONES   ← stop
+    La hora del lugar (primer evento del bloque) se usa como hora_inicio
+    del recinto en caso de evento multi-función.
     """
-    eventos = []
-    dia_actual = None
-    RE_DIA = re.compile(r"^(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[aá]bado|Domingo)\s+\d+", re.I)
+    desc = limpiar(descripcion)
+    if not desc:
+        return []
 
-    # Separa por bloques (--- o línea en blanco doble)
-    bloques = re.split(r"\n---+\n|\n{3,}", texto_completo)
+    # Detecta múltiples bloques iniciados con hora
+    # Ejemplo: "8:00pm. Stand Up...\n10:00pm. Música y Danza..."
+    multi = re.findall(
+        r"(\d{1,2}:\d{2}\s*(?:am|pm)\.?\s+.+?)(?=\d{1,2}:\d{2}\s*(?:am|pm)\.|$)",
+        desc, re.I | re.S
+    )
+    bloques = [limpiar(b) for b in multi if limpiar(b)] if len(multi) > 1 else [desc]
 
+    hora_fallback = primera_hora(desc)  # hora del primer evento del lugar
+
+    resultado = []
     for bloque in bloques:
-        bloque = bloque.strip()
-        if not bloque:
-            continue
+        hora = primera_hora(bloque) or hora_fallback
+        resultado.append({
+            "dia":        dia,
+            "lugar":      lugar,
+            "direccion":  direccion,
+            "descripcion": bloque,
+            "nombre":     bloque,          # mantener para compatibilidad / doc_id
+            "hora":       hora,
+            "tipo":       guess_tipo(bloque),
+        })
+    return resultado
 
-        # ¿Es encabezado de día?
-        if RE_DIA.match(bloque):
-            dia_actual = limpiar(bloque.split("\n")[0])
-            continue
-
-        # ¿Es la sección EXPOSICIONES? → parar
-        if re.match(r"EXPOSICI", bloque, re.I):
-            break
-
-        if not dia_actual:
-            continue
-
-        lineas = [limpiar(l) for l in bloque.split("\n")]
-        lineas = [l for l in lineas if l]  # quitar vacías
-        if len(lineas) < 2:
-            continue
-
-        # Línea 1: lugar
-        lugar_raw = lineas[0]
-        lugar = re.sub(r"\s*\(.*?\)\s*$", "", lugar_raw).strip()
-
-        # Línea 2: dirección (si está entre paréntesis)
-        direccion = ""
-        resto_idx = 1
-        if lineas[1].startswith("(") and lineas[1].endswith(")"):
-            direccion = lineas[1][1:-1].strip()
-            resto_idx = 2
-
-        descripcion = limpiar(" ".join(lineas[resto_idx:]))
-        if not descripcion:
-            continue
-
-        # Detecta múltiples horas dentro
-        _agregar_eventos(eventos, dia_actual, lugar, direccion, descripcion)
-
-    return eventos
-
-
-def extraer_de_details(soup) -> list[dict]:
+# ── PARSER PRINCIPAL ──────────────────────────────────────────────────────────
+def parse_agenda(html: str) -> list[dict]:
     """
-    Parser para cuando la página usa <details>/<summary>.
+    Recorre <article class="s"> → <details> → pares de <p> separados por <hr>.
+
+    Estructura dentro de cada <details>:
+      <summary class="h2">Lunes 23</summary>
+      <p> lugar <br> dirección </p>       ← p_lugar
+      <p> descripción del evento </p>     ← p_desc
+      <hr>
+      <p> lugar <br> dirección </p>
+      <p> descripción </p>
+      <hr>
+      ...
     """
+    soup = BeautifulSoup(html, "html.parser")
     eventos = []
+
+    # Contenedor principal
+    article = soup.find("article", class_="s") or soup.find("article") or soup.find("main") or soup.body
+    if not article:
+        print("❌ No se encontró el contenedor principal <article>.")
+        return []
+
     RE_DIA = re.compile(r"(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[aá]bado|Domingo)", re.I)
 
-    for det in soup.find_all("details"):
-        summary = det.find("summary")
+    for details in article.find_all("details", recursive=False):
+        summary = details.find("summary")
         if not summary:
             continue
+
         dia_texto = limpiar(summary.get_text())
+
+        # Parar en EXPOSICIONES
+        if re.search(r"EXPOSICI", dia_texto, re.I):
+            print(f"   🛑 Sección EXPOSICIONES encontrada → deteniendo scrape.")
+            break
+
+        # Solo procesar si es un día de la semana
         if not RE_DIA.search(dia_texto):
             continue
 
-        # Para en EXPOSICIONES
-        if re.search(r"EXPOSICI", dia_texto, re.I):
-            break
+        print(f"\n📅 Procesando: {dia_texto}")
 
-        # Extrae texto del bloque separando por <hr> o por pares de <p>
-        contenido = det.get_text("\n")
-        # Divide en sub-bloques por líneas vacías dobles o por <hr>
-        sub = re.split(r"\n{2,}", contenido)
+        # Recoge los hijos directos del <details> (excepto el <summary>)
+        # Los agrupa en pares: (p_lugar, p_desc) separados por <hr>
+        hijos = [h for h in details.children
+                 if isinstance(h, Tag) and h.name != "summary"]
+
         i = 0
-        while i < len(sub):
-            bloque = sub[i].strip()
-            if not bloque or bloque == dia_texto:
+        while i < len(hijos):
+            hijo = hijos[i]
+
+            # Saltar <hr>
+            if hijo.name == "hr":
                 i += 1
                 continue
-            lineas = [limpiar(l) for l in bloque.split("\n") if limpiar(l)]
-            if not lineas:
+
+            # Esperamos un <p> de lugar
+            if hijo.name != "p":
                 i += 1
                 continue
 
-            lugar_raw = lineas[0]
-            lugar = re.sub(r"\s*\(.*?\)\s*$", "", lugar_raw).strip()
-            direccion = ""
-            desc_start = 1
-            if len(lineas) > 1 and lineas[1].startswith("(") and lineas[1].endswith(")"):
-                direccion = lineas[1][1:-1].strip()
-                desc_start = 2
+            p_lugar = hijo
+            lineas_lugar = p_a_lineas(p_lugar)
 
-            # La descripción puede estar en el mismo bloque o en el siguiente
-            desc_lineas = lineas[desc_start:]
-            if not desc_lineas and i + 1 < len(sub):
+            if not lineas_lugar:
                 i += 1
-                desc_lineas = [limpiar(l) for l in sub[i].split("\n") if limpiar(l)]
+                continue
 
-            descripcion = limpiar(" ".join(desc_lineas))
-            if descripcion and lugar:
-                _agregar_eventos(eventos, dia_texto, lugar, direccion, descripcion)
-            i += 1
+            # Extrae lugar y dirección
+            lugar_raw  = lineas_lugar[0]
+            lugar      = re.sub(r"\s*\(.*?\)\s*$", "", lugar_raw).strip()
+            direccion  = ""
+
+            # La dirección puede estar en la misma línea entre paréntesis,
+            # o en la segunda línea entre paréntesis
+            m = re.search(r"\(([^)]+)\)", lugar_raw)
+            if m:
+                lugar     = lugar_raw[:m.start()].strip()
+                direccion = m.group(1).strip()
+            elif len(lineas_lugar) > 1 and lineas_lugar[1].startswith("("):
+                direccion = lineas_lugar[1].strip("() ")
+
+            # Busca el siguiente <p> de descripción (puede haber un <p> vacío entre medio)
+            p_desc = None
+            j = i + 1
+            while j < len(hijos):
+                if hijos[j].name == "hr":
+                    break
+                if hijos[j].name == "p":
+                    txt = limpiar(hijos[j].get_text())
+                    if txt:
+                        p_desc = hijos[j]
+                        j += 1
+                        break
+                j += 1
+
+            if p_desc:
+                descripcion = limpiar(p_desc.get_text(" "))
+                nuevos = crear_eventos(dia_texto, lugar, direccion, descripcion)
+                for ev in nuevos:
+                    print(f"   ✔ [{ev['hora'] or '??:??'}] {lugar}")
+                eventos.extend(nuevos)
+                i = j  # avanza al siguiente bloque
+            else:
+                i += 1
 
     return eventos
-
-
-def extraer_de_parrafos(soup) -> list[dict]:
-    """
-    Parser para cuando la página usa <p> con <br> internos, separados por <hr>.
-    Funciona para la mayoría de los casos que vemos en Heptagrama.
-    """
-    eventos = []
-    dia_actual = None
-    RE_DIA = re.compile(r"^(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[aá]bado|Domingo)\s*\d*$", re.I)
-
-    # Recorre todos los nodos: h2/h3 marcan días, p marcan eventos, hr separa
-    body = soup.find("article") or soup.find("main") or soup.find("body") or soup
-
-    for elem in body.find_all(["h1","h2","h3","h4","p","hr","details","summary"], recursive=True):
-
-        # ── Encabezado de día ────────────────────────────────────────────
-        if elem.name in ("h1","h2","h3","h4"):
-            txt = limpiar(elem.get_text())
-            if re.search(r"EXPOSICI", txt, re.I):
-                break
-            if RE_DIA.match(txt):
-                dia_actual = txt
-            continue
-
-        if not dia_actual:
-            continue
-
-        # ── Párrafo de evento ────────────────────────────────────────────
-        if elem.name == "p":
-            # Reconstruye líneas por <br>
-            lineas = []
-            buf = []
-            for node in elem.children:
-                if isinstance(node, NavigableString):
-                    buf.append(str(node))
-                elif isinstance(node, Tag):
-                    if node.name == "br":
-                        lineas.append(limpiar("".join(buf)))
-                        buf = []
-                    else:
-                        buf.append(node.get_text(" "))
-            if buf:
-                lineas.append(limpiar("".join(buf)))
-
-            lineas = [l for l in lineas if l]
-            if not lineas:
-                continue
-
-            lugar_raw = lineas[0]
-            lugar = re.sub(r"\s*\(.*?\)\s*$", "", lugar_raw).strip()
-            direccion = ""
-            desc_start = 1
-            if len(lineas) > 1 and lineas[1].startswith("("):
-                direccion = lineas[1].strip("()")
-                desc_start = 2
-
-            descripcion = limpiar(" ".join(lineas[desc_start:]))
-            if descripcion and lugar:
-                _agregar_eventos(eventos, dia_actual, lugar, direccion, descripcion)
-
-    return eventos
-
-
-def _agregar_eventos(eventos, dia, lugar, direccion, descripcion):
-    """
-    Añade uno o varios eventos a la lista.
-    Si la descripción contiene múltiples horas (ej: Jazz Zone),
-    crea un evento por cada bloque de hora.
-    """
-    # Intenta detectar múltiples bloques "HH:MMam/pm. Texto"
-    multi = re.findall(
-        r"(\d{1,2}:\d{2}\s*(?:am|pm)\.?\s+.+?)(?=\d{1,2}:\d{2}\s*(?:am|pm)|$)",
-        descripcion, re.I | re.S
-    )
-    bloques = [limpiar(b) for b in multi if limpiar(b)] if len(multi) > 1 else [descripcion]
-
-    hora_fallback = primera_hora(descripcion)
-
-    for bloque in bloques:
-        hora = primera_hora(bloque) or hora_fallback
-        eventos.append({
-            "dia": dia,
-            "lugar": lugar,
-            "direccion": direccion,
-            "descripcion": bloque,
-            "nombre": bloque,
-            "hora": hora,
-            "tipo": guess_tipo(bloque),
-        })
-
-
-# ── PARSER PRINCIPAL — prueba los tres métodos ────────────────────────────────
-def parse_agenda(html: str) -> list[dict]:
-    soup = BeautifulSoup(html, "html.parser")
-
-    # Diagnóstico siempre visible
-    diagnosticar(soup)
-
-    # 1) ¿Tiene <details>? → parser de details
-    if soup.find("details"):
-        print("🔍 Usando parser: <details>/<summary>")
-        eventos = extraer_de_details(soup)
-        if eventos:
-            return eventos
-        print("   ⚠ Parser details no encontró eventos, probando parrafos...")
-
-    # 2) ¿Tiene <h2> o <h3> con nombres de días?
-    RE_DIA = re.compile(r"(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[aá]bado|Domingo)", re.I)
-    headings = [h for h in soup.find_all(["h2","h3"]) if RE_DIA.search(h.get_text())]
-    if headings:
-        print("🔍 Usando parser: <h2>/<h3> + <p>")
-        eventos = extraer_de_parrafos(soup)
-        if eventos:
-            return eventos
-        print("   ⚠ Parser parrafos no encontró eventos, probando texto plano...")
-
-    # 3) Fallback: texto plano de toda la página
-    print("🔍 Usando parser: texto plano (fallback)")
-    texto = soup.get_text("\n")
-    return extraer_de_bloques_de_texto(texto)
-
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
-    print("🔎 Descargando agenda...")
+    print("🔎 Descargando agenda desde Heptagrama...")
     res = requests.get(HEPTAGRAMA_URL, headers={
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
@@ -385,13 +307,14 @@ def main():
     eventos = parse_agenda(res.text)
 
     if not eventos:
-        print("\n❌ Ningún parser encontró eventos.")
-        print("   Guarda el HTML con: curl -o pagina.html https://heptagrama.com/agenda-cultural-lima.htm")
+        print("\n❌ No se encontraron eventos.")
+        print("   Tip: guarda el HTML con:")
+        print("   curl -A 'Mozilla/5.0' -o pagina.html https://heptagrama.com/agenda-cultural-lima.htm")
         print("   y compártelo para analizar la estructura exacta.")
         return
 
-    print(f"\n✅ {len(eventos)} eventos encontrados.")
     from collections import Counter
+    print(f"\n✅ {len(eventos)} eventos encontrados:")
     for d, n in sorted(Counter(e["dia"] for e in eventos).items()):
         print(f"   {d}: {n} evento(s)")
 
@@ -407,17 +330,19 @@ def main():
             batch.commit(); batch = db.batch()
     if cnt % 500 != 0:
         batch.commit()
-    print(f"   ✅ {cnt} eliminados.")
+    print(f"   ✅ {cnt} documentos eliminados.")
 
-    print("\n☁️  Subiendo eventos...")
+    print("\n☁️  Subiendo a Firestore...")
     for ev in eventos:
         doc_id = slugify(f"{ev['dia']} {ev['lugar']} {ev['hora']} {ev['nombre'][:60]}")
+
         if ev.get("lugar") or ev.get("direccion"):
             coords = geocodificar(ev["lugar"], ev["direccion"])
             if coords:
                 ev["lat"], ev["lon"] = coords
             else:
                 print(f"   ❌ Sin coords: {ev['lugar']} / {ev['direccion']}")
+
         db.collection("eventos").document(doc_id).set(ev)
         print(f"   ☁ {ev['dia']} - {ev['lugar']} [{ev['hora'] or '??'}]")
         time.sleep(1)
@@ -426,7 +351,7 @@ def main():
         "updatedAt": firestore.SERVER_TIMESTAMP,
         "source": "Heptagrama"
     })
-    print("\n✅ Listo.")
+    print("\n✅ Actualización completa.")
 
 
 if __name__ == "__main__":
