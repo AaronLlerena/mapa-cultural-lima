@@ -1,435 +1,329 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title>Mapa Cultural de Lima</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        body, html { margin:0; padding:0; font-family:'Segoe UI',sans-serif; height:100%; overflow:hidden; }
-        .main-container { display:flex; height:100vh; width:100%; }
+#!/usr/bin/env python3
+"""
+Scraper — Agenda Cultural de Lima (Heptagrama)
 
-        /* ── SIDEBAR ── */
-        .sidebar {
-            width:340px; min-width:280px; max-width:50vw;
-            background:#f8f9fa; padding:10px; overflow-y:auto;
-            box-shadow:2px 0 5px rgba(0,0,0,.1);
-            display:flex; flex-direction:column; gap:8px;
-            z-index:1001; resize:horizontal; overflow-x:hidden;
-        }
-        #map { flex-grow:1; height:100%; background:#e0e0e0; }
+Estructura HTML confirmada:
+  <article class="s">
+    <details>
+      <summary class="h2">Lunes 23</summary>
 
-        .titulo-seccion {
-            font-size:.9em; margin-bottom:3px; color:#555;
-            font-weight:bold; margin-top:8px;
-            text-transform:uppercase; letter-spacing:.5px;
-        }
-        select.filtro-dia {
-            width:100%; padding:8px; background:#fff;
-            border:1px solid #007bff; border-radius:6px;
-            font-size:14px; color:#333; cursor:pointer; font-weight:bold;
-        }
-        .btn-filtro {
-            width:100%; padding:8px 10px; cursor:pointer;
-            background:#fff; border:1px solid #ddd; border-radius:6px;
-            text-align:left; font-size:13px; transition:all .2s;
-            margin-bottom:4px; display:flex; align-items:center; gap:8px;
-        }
-        .btn-filtro:hover { background:#f1f3f5; transform:translateX(2px); }
-        .btn-filtro.activo { background:#007bff; color:white; border-color:#0056b3; box-shadow:0 2px 4px rgba(0,123,255,.3); }
+      <p> Nombre Recinto <br> (dirección - distrito) </p>   ← p_lugar
+      <p> Descripción del evento... a las 8:00pm. </p>      ← p_desc
+      <hr>
+      <p> Otro Recinto <br> (dirección) </p>
+      <p> Otra descripción... </p>
+      <hr>
+      ...
+    </details>
+    ...
+    <details>                     ← EXPOSICIONES → ignorar todo
+      <summary>Exposiciones</summary>
+      ...
+    </details>
+  </article>
 
-        .controles-resultados { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
-        .btn-ordenar { background:#6c757d; color:white; border:none; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer; }
+Reglas:
+- Dentro de cada <details>, los hijos son: <p>, <p>, <hr>, <p>, <p>, <hr>, ...
+- Siempre en pares (p_lugar, p_desc) separados por <hr>.
+- La hora SIEMPRE está en la descripción. Tomamos solo la PRIMERA hora.
+- El geocoding usa SOLO lugar + dirección del recinto (nunca descripción).
+"""
 
-        /* ── TARJETAS ── */
-        .lista-container { margin-top:5px; }
-        .evento-card {
-            background:white; border:1px solid #e9ecef; border-radius:8px;
-            padding:12px; margin-bottom:10px; cursor:pointer;
-            transition:all .2s; position:relative;
-            box-shadow:0 1px 2px rgba(0,0,0,.05);
-        }
-        .evento-card:hover { border-color:#007bff; transform:translateY(-2px); box-shadow:0 4px 8px rgba(0,0,0,.1); }
-        .evento-card .meta-hora {
-            display:inline-block; background:#e9ecef; padding:2px 6px;
-            border-radius:4px; font-size:11px; color:#333; font-weight:bold; margin-bottom:6px;
-        }
-        .evento-card .meta-lugar { font-size:12px; color:#007bff; font-weight:700; margin-bottom:2px; }
-        .evento-card .meta-direccion { font-size:11px; color:#666; font-style:italic; margin-bottom:6px; display:block; }
-        .evento-card .meta-descripcion {
-            font-size:12px; color:#444; margin:6px 0 0 0;
-            line-height:1.5; border-top:1px solid #f0f0f0; padding-top:6px;
-        }
+import json, os, re, time
+import requests
+from bs4 import BeautifulSoup, NavigableString, Tag
+import firebase_admin
+from firebase_admin import credentials, firestore
+from geopy.geocoders import ArcGIS
 
-        .btn-agendar {
-            position:absolute; top:10px; right:10px;
-            padding:4px 10px; font-size:11px; border:1px solid #007bff;
-            background:white; color:#007bff; border-radius:20px;
-            cursor:pointer; transition:all .2s; font-weight:600;
-        }
-        .btn-agendar:hover { background:#f0f8ff; }
-        .btn-agendar.agendado { background:#007bff; color:white; border-color:#0056b3; }
+# ── CONFIG ────────────────────────────────────────────────────────────────────
+HEPTAGRAMA_URL  = "https://heptagrama.com/agenda-cultural-lima.htm"
+FIREBASE_SECRET = "FIREBASE_SERVICE_ACCOUNT"
+LIMA_LAT = (-12.30, -11.70)
+LIMA_LON = (-77.20, -76.70)
 
-        /* ── POPUP DEL MAPA ── */
-        .leaflet-popup-content-wrapper {
-            border-radius:8px !important;
-            padding:0 !important;
-            width:220px !important;        /* ancho fijo — no se estira */
-        }
-        .leaflet-popup-content {
-            margin:0 !important;
-            padding:0 !important;
-            width:220px !important;        /* mismo ancho que el wrapper */
-        }
-        .popup-box {
-            font-family:'Segoe UI',sans-serif;
-            font-size:11px; line-height:1.45;
-            width:220px;
-            max-height:200px;              /* altura máxima con scroll */
-            overflow-y:auto;
-            padding:10px 12px;
-            box-sizing:border-box;
-        }
-        .popup-box .ph { font-weight:700; font-size:12px; color:#007bff; margin-bottom:3px; }
-        .popup-box .pl { font-size:10px; color:#666; font-style:italic; margin-bottom:6px; }
-        .popup-box .pd {
-            color:#333;
-            white-space:normal;            /* wrap normal, sin columnas largas */
-            word-break:break-word;
-            overflow-wrap:break-word;
-        }
+# ── FIREBASE ──────────────────────────────────────────────────────────────────
+def init_db():
+    key_json = os.getenv(FIREBASE_SECRET)
+    if key_json:
+        cred = credentials.Certificate(json.loads(key_json))
+    else:
+        cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred)
+    return firestore.client()
 
-        /* ── BOTÓN RUTA ── */
-        .btn-ruta-final {
-            background:#28a745; color:white; font-weight:bold; font-size:14px;
-            text-align:center; border:none; padding:12px; margin-top:5px;
-            cursor:pointer; width:100%; border-radius:6px;
-            box-shadow:0 2px 4px rgba(40,167,69,.3); transition:background .2s;
-        }
-        .btn-ruta-final:hover { background:#218838; }
-        .info-ruta { margin-top:15px; font-size:12px; background:#fff; padding:10px; border-radius:6px; border:1px solid #dee2e6; }
+# ── GEOCODING ─────────────────────────────────────────────────────────────────
+geo = ArcGIS(timeout=10)
 
-        /* ── PANEL AGENDA ── */
-        .agenda-panel {
-            position:fixed; top:90px; right:20px; width:320px;
-            max-height:calc(100vh - 120px); overflow:auto;
-            background:rgba(255,255,255,.96); border:1px solid rgba(0,0,0,.15);
-            border-radius:10px; box-shadow:0 12px 24px rgba(0,0,0,.15);
-            padding:10px 12px; z-index:2000; display:none;
-        }
-        .agenda-panel-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
-        .agenda-panel-header h4 { margin:0; font-size:14px; }
-        .agenda-btn { background:#007bff; color:white; border:none; border-radius:6px; padding:4px 8px; cursor:pointer; font-size:11px; }
-        .agenda-btn:hover { background:#0056b3; }
-        .agenda-item {
-            display:flex; justify-content:space-between; align-items:flex-start;
-            border-bottom:1px solid rgba(0,0,0,.08); padding:6px 0;
-        }
-        .agenda-item:last-child { border-bottom:none; }
-        .agenda-item button { background:transparent; border:none; color:#dc3545; cursor:pointer; font-size:14px; }
-        .agenda-item .agenda-title { font-size:12px; font-weight:600; margin-bottom:2px; }
-        .agenda-item .agenda-meta  { font-size:11px; color:#555; }
+def en_lima(lat, lon):
+    return LIMA_LAT[0] <= lat <= LIMA_LAT[1] and LIMA_LON[0] <= lon <= LIMA_LON[1]
 
-        /* ── ICONOS MAPA ── */
-        .icono-numero {
-            background-color:#007bff; color:white; border-radius:50%; text-align:center;
-            line-height:24px; font-weight:bold; font-size:12px;
-            border:2px solid white; box-shadow:0 2px 5px rgba(0,0,0,.5);
-        }
-        .icono-numero.inicio { background-color:#28a745; width:30px !important; height:30px !important; line-height:26px; font-size:14px; }
-    </style>
-</head>
-<body>
-    <div id="build-banner" style="position:fixed;top:0;left:0;right:0;background:#000;color:#fff;font-size:12px;padding:4px 8px;z-index:9999;text-align:center;">
-        UI build: <span>v=20260324-3</span>
-    </div>
+def _geocode_raw(query):
+    """Geocodifica y retorna (lat,lon) solo si cae dentro de Lima."""
+    try:
+        r = geo.geocode(query)
+        if r:
+            if en_lima(r.latitude, r.longitude):
+                return r.latitude, r.longitude
+            print(f"   ⚠ Fuera de Lima '{query}' → ({r.latitude:.3f},{r.longitude:.3f})")
+    except Exception as e:
+        print(f"   ⚠ Error geocode: {e}")
+    return None
 
-    <div class="main-container" style="margin-top:26px;">
-        <div class="sidebar">
-            <div class="titulo-seccion">📅 ¿Cuándo quieres salir?</div>
-            <div style="font-size:11px;color:#666;margin-top:4px;">UI v=20260324-3</div>
-            <select id="select-dias" class="filtro-dia" onchange="cambiarFiltroDia()">
-                <option value="Todos">Cargando días...</option>
-            </select>
-            <div id="last-update" style="font-size:12px;color:#555;margin-top:8px;">Actualizando...</div>
+def simplificar_lugar(lugar):
+    """
+    Extrae el nombre más reconocible de un recinto largo.
+    'Anfiteatro X del Parque de la Exposición' → 'Parque de la Exposición'
+    """
+    m = re.search(r"\b(?:del|de la|de los|de las)\s+(.+)$", lugar, re.I)
+    if m:
+        c = m.group(1).strip()
+        if len(c.split()) >= 2:
+            return c
+    return lugar
 
-            <div class="titulo-seccion">🎭 ¿Qué te provoca?</div>
-            <div id="botones-categorias">
-                <button class="btn-filtro activo" onclick="cambiarFiltroCategoria('Todos',this)">👁️ Ver Todo</button>
-                <button class="btn-filtro" onclick="cambiarFiltroCategoria('Teatro',this)">🎭 Teatro</button>
-                <button class="btn-filtro" onclick="cambiarFiltroCategoria('Música',this)">🎵 Música</button>
-                <button class="btn-filtro" onclick="cambiarFiltroCategoria('Cine',this)">🎬 Cine</button>
-                <button class="btn-filtro" onclick="cambiarFiltroCategoria('Arte/Expo',this)">🖼️ Arte / Expo</button>
-            </div>
+def geocodificar(lugar, direccion):
+    """
+    Geocodifica usando SOLO el nombre del recinto y su dirección.
+    Prueba múltiples variantes en orden hasta encontrar un punto en Lima.
+    """
+    dir_n = (direccion or "").replace(" - ", ", ").strip()
+    lug_n = (lugar or "").strip()
 
-            <hr style="width:100%;border-color:#eee;margin:10px 0;">
+    intentos = []
+    if dir_n and lug_n:
+        intentos.append(f"{dir_n}, {lug_n}, Lima, Peru")
+    if dir_n:
+        intentos.append(f"{dir_n}, Lima, Peru")
+    if lug_n:
+        intentos.append(f"{lug_n}, Lima, Peru")
+    s = simplificar_lugar(lug_n)
+    if s != lug_n:
+        intentos.append(f"{s}, Lima, Peru")
 
-            <div class="controles-resultados">
-                <div class="titulo-seccion" style="margin:0">Eventos (<span id="contador-eventos">0</span>)</div>
-                <button class="btn-ordenar" onclick="ordenarPorHora()">🕒 Ordenar por Hora</button>
-            </div>
+    for q in intentos:
+        coords = _geocode_raw(q)
+        if coords:
+            print(f"   📍 OK: '{q}'")
+            return coords
+        time.sleep(0.3)
 
-            <div id="lista-lateral" class="lista-container">
-                <p style="font-size:12px;color:#666;text-align:center;">Cargando datos culturales...</p>
-            </div>
+    print(f"   ❌ Sin coords: {lug_n} / {dir_n}")
+    return None
 
-            <hr style="width:100%;border-color:#eee;margin:10px 0;">
-            <button class="btn-ruta-final" onclick="crearRuta()">🚀 Crear Ruta</button>
-            <div id="lista-ruta-resultado" class="info-ruta" style="display:none;"></div>
-        </div>
+# ── HELPERS ───────────────────────────────────────────────────────────────────
+def slugify(t):
+    s = re.sub(r"[^a-z0-9]+", "-", str(t).strip().lower())
+    return s.strip("-") or "evento"
 
-        <div id="agenda-panel" class="agenda-panel">
-            <div class="agenda-panel-header">
-                <h4>Tu agenda</h4>
-                <button class="agenda-btn" onclick="toggleAgenda()">✕</button>
-            </div>
-            <div id="agenda-list"></div>
-            <button class="btn-ruta-final" onclick="crearRuta()">🚀 Crear ruta</button>
-        </div>
+def guess_tipo(t):
+    t = (t or "").lower()
+    if any(k in t for k in ["teatro","obra","función","funcion","dramaturgia","escena","monólogo","unipersonal"]):
+        return "Teatro"
+    if any(k in t for k in ["música","musica","concierto","dj","band","orquesta","jazz","rock","crioll","blues","salsa","cumbia"]):
+        return "Música"
+    if any(k in t for k in ["expo","exposición","exposicion","muestra","arte","foto","pintura","galería","inaugurac"]):
+        return "Arte/Expo"
+    if any(k in t for k in ["cine","películ","film","documental","cortometraje","kino"]):
+        return "Cine"
+    return "Otro"
 
-        <div id="map"></div>
-    </div>
+# Regex de hora: captura "8:00pm", "8:00 pm", "8:00PM", "a las 8:00pm", "de 2:00pm"
+# Acepta con o sin espacio entre número y am/pm
+_RE_HORA = re.compile(
+    r"(?:a\s+las?\s+|de\s+)?(\d{1,2}:\d{2}\s*[aApP][mM])",
+    re.I
+)
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-polyline-decorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
-    <script>
-    try {
-        const firebaseConfig = {
-            apiKey:"AIzaSyCxwRwF97SheBpKd0bfZ6Gcw8XQH2QwNbc",
-            authDomain:"mapacultural-lima.firebaseapp.com",
-            projectId:"mapacultural-lima",
-            storageBucket:"mapacultural-lima.firebasestorage.app",
-            messagingSenderId:"170254428690",
-            appId:"1:170254428690:web:0b7dbd02636b6af29446cb"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
+def primera_hora(texto):
+    """Retorna SOLO la primera hora encontrada en el texto."""
+    m = _RE_HORA.search(texto or "")
+    if m:
+        # Normaliza: quita espacios internos ("8:00 pm" → "8:00pm")
+        return re.sub(r"\s+", "", m.group(1)).lower()
+    return ""
 
-        const map = L.map('map').setView([-12.046,-77.042],13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+def limpiar(t):
+    return re.sub(r"\s+", " ", (t or "")).strip()
 
-        let todos=[], actuales=[], selIDs=new Set();
-        let pines={}, lineaRuta=null, flechas=null, pinesRuta=[];
-        let filtroDia='Todos', filtroCat='Todos', ordenado=false;
-        const SEMANA=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+# ── EXTRAER TEXTO DE UN <p> CON <br> INTERNOS ────────────────────────────────
+def p_lineas(p: Tag) -> list[str]:
+    """
+    Convierte <p>Texto1<br>(Texto2)</p> en ['Texto1', '(Texto2)'].
+    Ignora líneas vacías.
+    """
+    lineas, buf = [], []
+    for node in p.children:
+        if isinstance(node, NavigableString):
+            buf.append(str(node))
+        elif isinstance(node, Tag) and node.name == "br":
+            lineas.append(limpiar("".join(buf)))
+            buf = []
+        elif isinstance(node, Tag):
+            buf.append(node.get_text(" "))
+    if buf:
+        lineas.append(limpiar("".join(buf)))
+    return [l for l in lineas if l]
 
-        // ── Firebase ──────────────────────────────────────────────────────
-        db.collection("meta").doc("lastUpdate").get()
-          .then(d=>{ const el=document.getElementById('last-update');
-            if(!d.exists){el.innerText='Sin registro de actualización';return;}
-            const dt=d.data().updatedAt.toDate();
-            el.innerText='Actualizado: '+dt.toLocaleString('es-PE',{dateStyle:'medium',timeStyle:'short'});
-          }).catch(()=>{});
+# ── PARSER PRINCIPAL ──────────────────────────────────────────────────────────
+def parse_agenda(html: str) -> list[dict]:
+    """
+    Recorre <article class="s"> → cada <details> es un día.
+    Dentro de cada <details>, los hijos directos son:
+      <summary>  → nombre del día
+      <p>        → lugar (con <br> y dirección)
+      <p>        → descripción
+      <hr>       → separador
+      <p>        → siguiente lugar
+      <p>        → siguiente descripción
+      <hr>
+      ...
+    Lógica: recoge todos los <p> hijos directos en orden,
+    los empareja de 2 en 2 (par, impar) como (lugar, descripción).
+    Los <hr> se ignoran — solo sirven visualmente.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    eventos = []
 
-        db.collection("eventos").get().then(snap=>{
-            if(snap.empty){
-                document.getElementById('lista-lateral').innerHTML='<p>Base de datos vacía.</p>';return;
+    article = (soup.find("article", class_="s")
+               or soup.find("article")
+               or soup.find("main")
+               or soup.body)
+
+    if not article:
+        print("❌ No se encontró el contenedor <article>.")
+        return []
+
+    RE_DIA = re.compile(
+        r"^(Lunes|Martes|Mi[eé]rcoles|Jueves|Viernes|S[aá]bado|Domingo)\s*\d*$",
+        re.I
+    )
+
+    # Itera sobre los <details> hijos directos del article
+    for details in article.find_all("details", recursive=False):
+        summary = details.find("summary")
+        if not summary:
+            continue
+
+        dia_texto = limpiar(summary.get_text())
+
+        # Ignorar EXPOSICIONES y cualquier sección que no sea día de semana
+        if re.search(r"EXPOSICI", dia_texto, re.I):
+            print(f"   🛑 Ignorando sección: '{dia_texto}'")
+            continue
+        if not RE_DIA.match(dia_texto):
+            print(f"   ⏭ Saltando sección desconocida: '{dia_texto}'")
+            continue
+
+        print(f"\n📅 {dia_texto}")
+
+        # Recoge TODOS los <p> hijos directos del <details> (ignora <hr> y otros)
+        parrafos = [h for h in details.children
+                    if isinstance(h, Tag) and h.name == "p"]
+
+        # Los empareja de 2 en 2: (p_lugar, p_desc)
+        i = 0
+        while i + 1 < len(parrafos):
+            p_lugar = parrafos[i]
+            p_desc  = parrafos[i + 1]
+            i += 2
+
+            # ── Extrae lugar y dirección del primer <p> ───────────────────
+            lineas = p_lineas(p_lugar)
+            if not lineas:
+                continue
+
+            lugar_raw = lineas[0]
+
+            # Dirección: puede estar en la misma línea "Nombre (dir)" o en línea 2
+            m = re.search(r"^(.*?)\s*\(([^)]+)\)\s*$", lugar_raw)
+            if m:
+                lugar     = m.group(1).strip()
+                direccion = m.group(2).strip()
+            elif len(lineas) > 1 and lineas[1].startswith("("):
+                lugar     = lugar_raw
+                direccion = lineas[1].strip("() ")
+            else:
+                lugar     = lugar_raw
+                direccion = ""
+
+            # ── Extrae descripción del segundo <p> ────────────────────────
+            descripcion = limpiar(p_desc.get_text(" "))
+            if not descripcion:
+                continue
+
+            # ── Hora: SIEMPRE la primera que aparezca en la descripción ───
+            hora = primera_hora(descripcion)
+
+            evento = {
+                "dia":         dia_texto,
+                "lugar":       lugar,
+                "direccion":   direccion,
+                "descripcion": descripcion,
+                "nombre":      descripcion,   # compatibilidad
+                "hora":        hora,
+                "tipo":        guess_tipo(descripcion),
             }
-            snap.forEach(doc=>{ const d=doc.data(); d.id=doc.id; todos.push(d); });
-            llenarDias(); aplicarFiltros();
-        }).catch(e=>alert("Error DB: "+e.message));
+            eventos.append(evento)
+            print(f"   ✔ [{hora or '??:??'}] {lugar}")
 
-        // ── Utilidades días ───────────────────────────────────────────────
-        const normDia = d=>(d||'').toString().trim().replace(/\s+/g,' ');
-        const parseDia = d=>{ const p=normDia(d).split(' '); return {n:p[0]||'',num:p[1]?parseInt(p[1]):NaN}; };
-        function cmpDias(a,b){
-            const da=parseDia(a.dia),db_=parseDia(b.dia);
-            const ia=SEMANA.indexOf(da.n),ib=SEMANA.indexOf(db_.n);
-            if(ia!==-1&&ib!==-1&&ia!==ib) return ia-ib;
-            if(ia!==-1&&ib===-1) return -1;
-            if(ib!==-1&&ia===-1) return 1;
-            if(da.n===db_.n&&!isNaN(da.num)&&!isNaN(db_.num)) return da.num-db_.num;
-            return (a.dia||'').localeCompare(b.dia||'','es');
-        }
-        function parseHora(h){
-            if(!h) return 9999;
-            const c=h.toString().toLowerCase().replace(/a las\s*/g,'').replace(/\./g,'');
-            const m=c.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-            if(!m) return 9999;
-            let hr=parseInt(m[1]),mn=m[2]?parseInt(m[2]):0,ap=m[3]?m[3].toLowerCase():null;
-            if(ap==='pm'&&hr<12) hr+=12;
-            if(ap==='am'&&hr===12) hr=0;
-            return hr*60+mn;
-        }
-        const sortLista=l=>l.sort((a,b)=>{ const c=cmpDias(a,b); return c!==0?c:parseHora(a.hora)-parseHora(b.hora); });
+    return eventos
 
-        // ── Dropdown días ─────────────────────────────────────────────────
-        function llenarDias(){
-            const sel=document.getElementById('select-dias');
-            const set=new Set(); todos.forEach(e=>{ if(e.dia) set.add(normDia(e.dia)); });
-            const arr=Array.from(set).sort((a,b)=>{
-                const da=parseDia(a),db_=parseDia(b);
-                const ia=SEMANA.indexOf(da.n),ib=SEMANA.indexOf(db_.n);
-                if(ia!==-1&&ib!==-1&&ia!==ib) return ia-ib;
-                if(ia!==-1&&ib===-1) return -1;
-                if(ib!==-1&&ia===-1) return 1;
-                if(da.n===db_.n&&!isNaN(da.num)&&!isNaN(db_.num)) return da.num-db_.num;
-                return a.localeCompare(b,'es');
-            });
-            sel.innerHTML='<option value="Todos">📅 Todos los Días</option>';
-            arr.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.text=d; sel.appendChild(o); });
-        }
+# ── MAIN ──────────────────────────────────────────────────────────────────────
+def main():
+    print("🔎 Descargando agenda de Heptagrama...")
+    res = requests.get(HEPTAGRAMA_URL, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+    }, timeout=30)
+    res.encoding = "utf-8"
 
-        // ── Filtros ───────────────────────────────────────────────────────
-        function cambiarFiltroDia(){ filtroDia=document.getElementById('select-dias').value; aplicarFiltros(); }
-        function cambiarFiltroCategoria(cat,btn){
-            filtroCat=cat;
-            document.querySelectorAll('#botones-categorias .btn-filtro').forEach(b=>b.classList.remove('activo'));
-            btn.classList.add('activo'); aplicarFiltros();
-        }
-        function aplicarFiltros(){
-            actuales=todos.filter(e=>{
-                const dOk=filtroDia==='Todos'||normDia(e.dia)===filtroDia;
-                const cOk=filtroCat==='Todos'||e.tipo===filtroCat;
-                return dOk&&cOk;
-            });
-            if(ordenado) sortLista(actuales);
-            render(actuales);
-        }
-        function ordenarPorHora(){ ordenado=true; sortLista(actuales); render(actuales); }
+    eventos = parse_agenda(res.text)
 
-        // ── Popup del mapa ────────────────────────────────────────────────
-        // Muestra texto COMPLETO del evento, con tipografía compacta.
-        function mkPopup(ev){
-            const hora  = ev.hora||'Sin hora';
-            const lugar = ev.lugar||'';
-            const dir   = ev.direccion||'';
-            const desc  = (ev.descripcion||ev.nombre||'').replace(/\s+/g,' ').trim();
-            return `<div class="popup-box">
-                <div class="ph">🕒 ${hora}</div>
-                <div class="pl">📍 ${lugar}${dir?' · '+dir:''}</div>
-                <div class="pd">${desc}</div>
-            </div>`;
-        }
+    if not eventos:
+        print("\n❌ No se encontraron eventos.")
+        return
 
-        // ── Render tarjetas ───────────────────────────────────────────────
-        function limpiarRuta(){
-            if(lineaRuta) map.removeLayer(lineaRuta);
-            if(flechas)   map.removeLayer(flechas);
-            pinesRuta.forEach(p=>map.removeLayer(p)); pinesRuta=[];
-        }
+    from collections import Counter
+    print(f"\n✅ Total: {len(eventos)} eventos")
+    for dia, n in sorted(Counter(e["dia"] for e in eventos).items()):
+        print(f"   {dia}: {n} evento(s)")
 
-        function render(lista){
-            limpiarRuta();
-            Object.values(pines).forEach(p=>map.removeLayer(p)); pines={};
-            document.getElementById('contador-eventos').innerText=lista.length;
-            if(!lista.length){
-                document.getElementById('lista-lateral').innerHTML=
-                    "<p style='text-align:center;padding:10px;color:#777;'>Sin resultados.</p>";
-                return;
-            }
-            let html='';
-            lista.forEach(ev=>{
-                const lat=parseFloat(ev.lat),lon=parseFloat(ev.lon);
-                if(isNaN(lat)) return;
-                // Pin con popup de descripción completa
-                const pin=L.marker([lat,lon]).bindPopup(mkPopup(ev),{maxWidth:220,minWidth:220});
-                pin.addTo(map); pines[ev.id]=pin;
+    # ── Firestore ─────────────────────────────────────────────────────────
+    db = init_db()
 
-                const ag=selIDs.has(ev.id);
-                const desc=(ev.descripcion||ev.nombre||'').replace(/\s+/g,' ').trim();
-                html+=`
-                <div class="evento-card" onclick="flyTo('${ev.id}')">
-                    <button id="btn-${ev.id}" class="btn-agendar${ag?' agendado':''}"
-                        onclick="event.stopPropagation();toggleAg('${ev.id}')">
-                        ${ag?'✅ Agendado':'Agendar'}
-                    </button>
-                    <span class="meta-hora">🕒 ${ev.hora||'Hora no especificada'}</span>
-                    <div class="meta-lugar">📍 ${ev.lugar||''}</div>
-                    ${ev.direccion?`<span class="meta-direccion">${ev.direccion}</span>`:''}
-                    ${desc?`<p class="meta-descripcion">${desc}</p>`:''}
-                </div>`;
-            });
-            document.getElementById('lista-lateral').innerHTML=html;
-        }
+    print("\n🧹 Limpiando colección 'eventos'...")
+    batch = db.batch()
+    cnt = 0
+    for doc in db.collection("eventos").stream():
+        batch.delete(doc.reference)
+        cnt += 1
+        if cnt % 500 == 0:
+            batch.commit(); batch = db.batch()
+    if cnt % 500 != 0:
+        batch.commit()
+    print(f"   ✅ {cnt} documentos eliminados.")
 
-        window.flyTo=function(id){
-            const p=pines[id]; if(p){map.flyTo(p.getLatLng(),16,{duration:1.5});p.openPopup();}
-        };
+    print("\n☁️  Subiendo eventos...")
+    for ev in eventos:
+        doc_id = slugify(
+            f"{ev['dia']} {ev['lugar']} {ev['hora']} {ev['nombre'][:60]}"
+        )
 
-        // ── Agendar ───────────────────────────────────────────────────────
-        const sortSel=()=>sortLista(Array.from(selIDs).map(id=>todos.find(e=>e.id===id)).filter(Boolean));
+        # Geocodifica usando SOLO lugar + dirección del recinto
+        coords = geocodificar(ev["lugar"], ev["direccion"])
+        if coords:
+            ev["lat"], ev["lon"] = coords
 
-        window.toggleAg=function(id){
-            const btn=document.getElementById('btn-'+id);
-            if(selIDs.has(id)){
-                selIDs.delete(id);
-                if(btn){btn.classList.remove('agendado');btn.innerHTML='Agendar';}
-            } else {
-                selIDs.add(id);
-                if(btn){btn.classList.add('agendado');btn.innerHTML='✅ Agendado';}
-            }
-            document.getElementById('lista-ruta-resultado').style.display='none';
-            limpiarRuta(); actualizarAgenda();
-        };
+        db.collection("eventos").document(doc_id).set(ev)
+        print(f"   ☁ {ev['dia']} [{ev['hora'] or '??'}] {ev['lugar']}")
+        time.sleep(1)
 
-        function toggleAgenda(){
-            const p=document.getElementById('agenda-panel');
-            p.style.display=p.style.display==='block'?'none':'block';
-        }
-        function actualizarAgenda(){
-            const panel=document.getElementById('agenda-panel');
-            const list=document.getElementById('agenda-list');
-            const sel=sortSel();
-            if(!sel.length){panel.style.display='none';return;}
-            panel.style.display='block'; list.innerHTML='';
-            sel.forEach(ev=>{
-                const el=document.createElement('div'); el.className='agenda-item';
-                const desc=(ev.descripcion||ev.nombre||'');
-                const r=desc.length>55?desc.slice(0,55).trim()+'…':desc;
-                el.innerHTML=`<div style="flex:1;">
-                    <div class="agenda-title">${ev.hora||'??:??'} · ${r}</div>
-                    <div class="agenda-meta">${ev.lugar}${ev.direccion?' · '+ev.direccion:''}</div>
-                </div><button onclick="event.stopPropagation();toggleAg('${ev.id}')">✕</button>`;
-                el.addEventListener('click',()=>flyTo(ev.id));
-                list.appendChild(el);
-            });
-        }
+    db.collection("meta").document("lastUpdate").set({
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+        "source":    "Heptagrama"
+    })
+    print("\n✅ Actualización completa.")
 
-        // ── Ruta ──────────────────────────────────────────────────────────
-        window.crearRuta=function(){
-            const ruta=sortSel();
-            if(ruta.length<2){alert("Selecciona al menos 2 eventos.");return;}
-            limpiarRuta();
-            Object.values(pines).forEach(p=>map.removeLayer(p));
-            const ll=[];
-            ruta.forEach((ev,i)=>{
-                const lat=parseFloat(ev.lat),lon=parseFloat(ev.lon);
-                ll.push([lat,lon]);
-                const ic=L.divIcon({className:'custom',
-                    html:`<div class='icono-numero${i===0?' inicio':''}'>${i+1}</div>`,
-                    iconSize:[25,25],iconAnchor:[12,12]});
-                pinesRuta.push(L.marker([lat,lon],{icon:ic})
-                    .bindPopup(mkPopup(ev),{maxWidth:220,minWidth:220}).addTo(map));
-            });
-            lineaRuta=L.polyline(ll,{color:'#007bff',weight:4,opacity:.8,dashArray:'10,10'}).addTo(map);
-            flechas=L.polylineDecorator(lineaRuta,{patterns:[
-                {offset:'10%',repeat:0,endOffset:'25px',
-                 symbol:L.Symbol.arrowHead({pixelSize:15,polygon:false,pathOptions:{stroke:true,color:'#007bff',weight:3}})},
-                {offset:'50%',repeat:'300px',
-                 symbol:L.Symbol.arrowHead({pixelSize:12,polygon:false,pathOptions:{stroke:true,color:'#007bff',weight:2}})}
-            ]}).addTo(map);
-            map.fitBounds(lineaRuta.getBounds(),{padding:[50,50]});
-            let h='<b>🗓️ Tu Ruta Cultural:</b><br>';
-            ruta.forEach((e,i)=>{
-                const d=(e.descripcion||e.nombre||'');
-                const r=d.length>40?d.slice(0,40).trim()+'…':d;
-                h+=`<div style="margin-bottom:8px;border-bottom:1px dotted #ccc;padding-bottom:5px;">
-                    <span style="background:${i===0?'#28a745':'#007bff'};color:white;border-radius:50%;padding:2px 7px;font-size:11px;font-weight:bold;">${i+1}</span>
-                    <b>${e.hora}</b> — ${r}<br>
-                    <small style="color:#666;margin-left:25px;display:block;">📍 ${e.lugar}</small>
-                </div>`;
-            });
-            const r=document.getElementById('lista-ruta-resultado');
-            r.innerHTML=h; r.style.display='block'; r.scrollIntoView({behavior:'smooth'});
-        };
-
-    } catch(e){ alert("Error crítico: "+e.message); }
-    </script>
-</body>
-</html>
+if __name__ == "__main__":
+    main()
