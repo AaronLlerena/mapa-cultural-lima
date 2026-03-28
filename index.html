@@ -470,41 +470,25 @@
         const modalLogin = document.getElementById('modal-login');
         const modalEditor = document.getElementById('modal-editor');
 
-        // Firebase Auth (carga dinámica del SDK)
-        let auth = null;
-        function cargarAuth(){
-            return new Promise(resolve=>{
-                if(auth){ resolve(auth); return; }
-                const s = document.createElement('script');
-                s.src = 'https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js';
-                s.onload = ()=>{ auth = firebase.auth(); resolve(auth); };
-                document.head.appendChild(s);
-            });
+        // PIN de acceso al editor — cámbialo por el tuyo aquí:
+        const EDITOR_PIN = '1234';
+
+        function abrirEditor(){
+            document.getElementById('pin-input').value='';
+            document.getElementById('pin-error').innerText='';
+            document.getElementById('modal-login').style.display='flex';
+            setTimeout(()=>document.getElementById('pin-input').focus(), 100);
         }
 
-        async function abrirEditor(){
-            const a = await cargarAuth();
-            const user = a.currentUser;
-            if(!user){
-                // Muestra modal de login
-                document.getElementById('modal-login').style.display='flex';
-            } else {
-                activarModoEditor();
-            }
-        }
-
-        window.loginEditor = async function(){
-            const email = document.getElementById('editor-email').value.trim();
-            const pass  = document.getElementById('editor-pass').value;
-            const err   = document.getElementById('login-error');
-            err.innerText = '';
-            try {
-                const a = await cargarAuth();
-                await a.signInWithEmailAndPassword(email, pass);
+        window.loginEditor = function(){
+            const pin = document.getElementById('pin-input').value.trim();
+            if(pin === EDITOR_PIN){
                 document.getElementById('modal-login').style.display='none';
                 activarModoEditor();
-            } catch(e){
-                err.innerText = 'Error: ' + (e.message||'Credenciales incorrectas');
+            } else {
+                document.getElementById('pin-error').innerText = '❌ PIN incorrecto';
+                document.getElementById('pin-input').value='';
+                document.getElementById('pin-input').focus();
             }
         };
 
@@ -601,9 +585,7 @@
             if(pinEditable){ map.removeLayer(pinEditable); pinEditable=null; }
         };
 
-        window.salirModoEditor = async function(){
-            const a = await cargarAuth();
-            await a.signOut();
+        window.salirModoEditor = function(){
             desactivarModoEditor();
         };
 
@@ -646,16 +628,16 @@
         };
 
     } catch(e){ alert("Error crítico: "+e.message); }
-    </script>    <!-- ── MODAL LOGIN EDITOR ── -->
+    </script>    <!-- ── MODAL PIN EDITOR ── -->
     <div id="modal-login" class="modal-overlay">
-        <div class="modal-box">
-            <h3>🔐 Acceso al Editor</h3>
-            <label>Correo electrónico</label>
-            <input id="editor-email" type="email" placeholder="tu@correo.com" />
-            <label>Contraseña</label>
-            <input id="editor-pass" type="password" placeholder="••••••••" />
-            <div id="login-error"></div>
-            <button class="btn-modal-ok" onclick="loginEditor()">Entrar</button>
+        <div class="modal-box" style="width:280px;">
+            <h3 style="text-align:center;">🔐 Editor</h3>
+            <p style="text-align:center;font-size:13px;color:#666;margin:0;">Ingresa el PIN de 4 dígitos</p>
+            <input id="pin-input" type="password" maxlength="4" placeholder="••••"
+                style="text-align:center;font-size:28px;letter-spacing:10px;padding:10px;"
+                oninput="if(this.value.length===4) loginEditor()"
+                onkeydown="if(event.key==='Enter') loginEditor()" />
+            <div id="pin-error" style="text-align:center;font-size:12px;color:#dc3545;min-height:16px;"></div>
             <button class="btn-modal-cancel" onclick="cerrarLogin()">Cancelar</button>
         </div>
     </div>
